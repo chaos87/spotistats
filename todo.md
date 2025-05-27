@@ -1,7 +1,3 @@
-﻿Okay, here is a detailed `todo.md` checklist based on the comprehensive specification and the step-by-step blueprint we've developed. This should serve as an excellent guide for implementation, ensuring every small piece is tracked and integrated.
-
-----------
-
 # TODO: Spotify Listening Dashboard Implementation Checklist
 
 This checklist is based on the project specification, broken down into iterative, test-driven steps.
@@ -10,28 +6,28 @@ This checklist is based on the project specification, broken down into iterative
 
 ### Module 1.1: Project Initialization & Repository Setup
 
--   [ ] **Initialize Root Git Repository**
-    -   [ ] Create `spotify-dashboard` root directory.
+-   [x] **Initialize Root Git Repository**
+    -   [x] Create `spotify-dashboard` root directory.
     -   [x] Run `git init` in the root.
-    -   [ ] Create a root `.gitignore` file.
--   [ ] **Create Monorepo Subdirectories**
-    -   [ ] Create `backend/`
-    -   [ ] Create `cubejs/`
-    -   [ ] Create `frontend/`
--   [ ] **Initialize Python Backend Project (Poetry)**
-    -   [ ] Navigate to `backend/`.
-    -   [ ] Run `poetry init` to create `pyproject.toml`.
-    -   [ ] Add initial dependencies to `backend/pyproject.toml`:
+    -   [x] Create a root `.gitignore` file.
+-   [x] **Create Monorepo Subdirectories**
+    -   [x] Create `backend/`
+    -   [x] Create `cubejs/`
+    -   [x] Create `frontend/`
+-   [x] **Initialize Python Backend Project (Poetry)**
+    -   [x] Navigate to `backend/`.
+    -   [x] Run `poetry init` to create `pyproject.toml`.
+    -   [x] Add initial dependencies to `backend/pyproject.toml`:
         -   `requests`
         -   `psycopg2-binary`
         -   `SQLAlchemy`
         -   `python-dotenv`
         -   `pyjwt`
-    -   [ ] Add `pytest` as a development dependency.
-    -   [ ] Create `backend/main.py` (simple print statement).
-    -   [ ] Create `backend/tests/` directory.
-    -   [ ] Create `backend/tests/test_main.py` (simple passing test).
-    -   [ ] Run `poetry install` to confirm setup.
+    -   [x] Add `pytest` as a development dependency.
+    -   [x] Create `backend/main.py` (simple print statement).
+    -   [x] Create `backend/tests/` directory.
+    -   [x] Create `backend/tests/test_main.py` (simple passing test).
+    -   [x] Run `poetry install` to confirm setup.
 
 ### Module 1.2: Database & Schema Foundation (Neon)
 
@@ -355,5 +351,3 @@ This checklist is based on the project specification, broken down into iterative
         -   [ ] Build command and output directory configuration.
         -   [ ] **Crucially, instructions for setting `VITE_CUBEJS_API_URL` as a production environment variable in Vercel settings.**
         -   [ ] Steps to trigger and verify deployment.
-
-----------
