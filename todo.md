@@ -3,28 +3,28 @@ This checklist is based on the project specification, broken down into iterative
 
 Phase 1: Core Infrastructure & Setup
 Module 1.1: Project Initialization & Repository Setup
-[x] Initialize Root Git Repository
-[x] Create spotify-dashboard root directory.
-[x] Run git init in the root.
-[x] Create a root .gitignore file.
-[x] Create Monorepo Subdirectories
-[x] Create backend/
-[x] Create cubejs/
-[x] Create frontend/
-[x] Initialize Python Backend Project (Poetry)
-[x] Navigate to backend/.
-[x] Run poetry init to create pyproject.toml.
-[x] Add initial dependencies to backend/pyproject.toml:
+[ ] Initialize Root Git Repository
+[ ] Create spotify-dashboard root directory.
+[ ] Run git init in the root.
+[ ] Create a root .gitignore file.
+[ ] Create Monorepo Subdirectories
+[ ] Create backend/
+[ ] Create cubejs/
+[ ] Create frontend/
+[ ] Initialize Python Backend Project (Poetry)
+[ ] Navigate to backend/.
+[ ] Run poetry init to create pyproject.toml.
+[ ] Add initial dependencies to backend/pyproject.toml:
 requests
 psycopg2-binary
 SQLAlchemy
 python-dotenv
 pyjwt
-[x] Add pytest as a development dependency.
-[x] Create backend/main.py (simple print statement).
-[x] Create backend/tests/ directory.
-[x] Create backend/tests/test_main.py (simple passing test).
-[x] Run poetry install to confirm setup.
+[ ] Add pytest as a development dependency.
+[ ] Create backend/main.py (simple print statement).
+[ ] Create backend/tests/ directory.
+[ ] Create backend/tests/test_main.py (simple passing test).
+[ ] Run poetry install to confirm setup.
 Module 1.2: Database & Schema Foundation (Neon)
 [ ] Provision Neon PostgreSQL Database
 [ ] Create a new project/database on Neon.tech.
