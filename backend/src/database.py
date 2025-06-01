@@ -1,7 +1,7 @@
 import logging
 from sqlalchemy import create_engine, Column, BigInteger, DateTime, func
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import declarative_base # Corrected import path
 from sqlalchemy.orm import sessionmaker, Session
 from typing import Dict, Any
 
