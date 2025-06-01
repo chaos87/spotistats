@@ -46,23 +46,23 @@ This checklist is based on the project specification, broken down into iterative
 
 ### Module 2.1: Spotify API Client & Authentication
 
--   [ ] **Implement Spotify OAuth Client (`backend/src/spotify_client.py`)**
-    -   [ ] Define `SpotifyOAuthClient` class.
-    -   [ ] Implement `get_access_token_from_refresh(self)` method.
-    -   [ ] Implement `get_initial_refresh_token_manual_flow(self, auth_code, redirect_uri)` method.
-    -   [ ] Add basic error handling and logging within the client.
-    -   [ ] Create `backend/tests/test_spotify_client.py`.
-    -   [ ] Write unit tests for both client methods (mocking `requests`).
--   [ ] **Secure Environment Variable Loading (`backend/src/config.py`)**
-    -   [ ] Create `backend/src/config.py`.
-    -   [ ] Implement functions to load `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET`, `SPOTIFY_REFRESH_TOKEN` from environment variables using `python-dotenv`.
-    -   [ ] Raise errors if required variables are missing.
-    -   [ ] Create `backend/.env` with placeholder values (add to `.gitignore`).
-    -   [ ] Create `backend/tests/test_config.py` with tests for env var loading.
--   [ ] **Integrate Auth Client with `main.py`**
-    -   [ ] Update `backend/main.py` to load credentials via `config.py`.
-    -   [ ] Instantiate `SpotifyOAuthClient` and call `get_access_token_from_refresh()` (print token for now).
-    -   [ ] Verify local execution for token retrieval.
+-   [x] **Implement Spotify OAuth Client (`backend/src/spotify_client.py`)**
+    -   [x] Define `SpotifyOAuthClient` class.
+    -   [x] Implement `get_access_token_from_refresh(self)` method.
+    -   [x] Implement `get_initial_refresh_token_manual_flow(self, auth_code, redirect_uri)` method.
+    -   [x] Add basic error handling and logging within the client.
+    -   [x] Create `backend/tests/test_spotify_client.py`.
+    -   [x] Write unit tests for both client methods (mocking `requests`).
+-   [x] **Secure Environment Variable Loading (`backend/src/config.py`)**
+    -   [x] Create `backend/src/config.py`.
+    -   [x] Implement functions to load `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET`, `SPOTIFY_REFRESH_TOKEN` from environment variables using `python-dotenv`.
+    -   [x] Raise errors if required variables are missing.
+    -   [x] Create `backend/.env` with placeholder values (add to `.gitignore`).
+    -   [x] Create `backend/tests/test_config.py` with tests for env var loading.
+-   [x] **Integrate Auth Client with `main.py`**
+    -   [x] Update `backend/main.py` to load credentials via `config.py`.
+    -   [x] Instantiate `SpotifyOAuthClient` and call `get_access_token_from_refresh()` (print token for now).
+    -   [x] Verify local execution for token retrieval.
 
 ### Module 2.2: Raw Data Ingestion
 
