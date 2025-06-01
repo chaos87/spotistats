@@ -66,27 +66,27 @@ This checklist is based on the project specification, broken down into iterative
 
 ### Module 2.2: Raw Data Ingestion
 
--   [ ] **Implement Spotify Data Fetcher (`backend/src/spotify_data.py`)**
-    -   [ ] Create `backend/src/spotify_data.py`.
-    -   [ ] Define `get_recently_played_tracks(access_token, limit=50)`.
-    -   [ ] Add basic error handling and logging.
-    -   [ ] Create `backend/tests/test_spotify_data.py`.
-    -   [ ] Write unit tests for `get_recently_played_tracks` (mocking `requests`).
--   [ ] **Setup SQLAlchemy ORM and Raw Data Insertion (`backend/src/database.py`)**
-    -   [ ] In `backend/src/database.py`:
-        -   [ ] Define `get_db_engine()` using `DATABASE_URL` from `config.py`.
-        -   [ ] Define `Base = declarative_base()`.
-        -   [ ] Define SQLAlchemy model for `recently_played_tracks_raw` table.
-        -   [ ] Implement `insert_raw_data(engine, raw_json_data)`.
-    -   [ ] Create `backend/tests/test_database.py`.
-    -   [ ] Write unit tests for `get_db_engine` and `insert_raw_data` (using in-memory SQLite or mocked engine/session).
-    -   [ ] Update `backend/.env` with `DATABASE_URL` placeholder.
--   [ ] **Wire up Raw Data Ingestion in `main.py`**
-    -   [ ] Update `backend/main.py` to:
-        -   [ ] Call `get_recently_played_tracks`.
-        -   [ ] Call `insert_raw_data`.
-        -   [ ] Add logging for success/failure.
-    -   [ ] Test end-to-end raw data ingestion locally.
+-   [x] **Implement Spotify Data Fetcher (`backend/src/spotify_data.py`)**
+    -   [x] Create `backend/src/spotify_data.py`.
+    -   [x] Define `get_recently_played_tracks(access_token, limit=50)`.
+    -   [x] Add basic error handling and logging.
+    -   [x] Create `backend/tests/test_spotify_data.py`.
+    -   [x] Write unit tests for `get_recently_played_tracks` (mocking `requests`).
+-   [x] **Setup SQLAlchemy ORM and Raw Data Insertion (`backend/src/database.py`)**
+    -   [x] In `backend/src/database.py`:
+        -   [x] Define `get_db_engine()` using `DATABASE_URL` from `config.py`.
+        -   [x] Define `Base = declarative_base()`.
+        -   [x] Define SQLAlchemy model for `recently_played_tracks_raw` table.
+        -   [x] Implement `insert_raw_data(engine, raw_json_data)`.
+    -   [x] Create `backend/tests/test_database.py`.
+    -   [x] Write unit tests for `get_db_engine` and `insert_raw_data` (using in-memory SQLite or mocked engine/session).
+    -   [x] Update `backend/.env` with `DATABASE_URL` placeholder.
+-   [x] **Wire up Raw Data Ingestion in `main.py`**
+    -   [x] Update `backend/main.py` to:
+        -   [x] Call `get_recently_played_tracks`.
+        -   [x] Call `insert_raw_data`.
+        -   [x] Add logging for success/failure.
+    -   [x] Test end-to-end raw data ingestion locally.
 
 ### Module 2.3: Initial Normalized Data Processing & Loading
 
