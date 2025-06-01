@@ -1,58 +1,86 @@
 import logging
-from backend.src.spotify_client import SpotifyOAuthClient
-from backend.src.config import load_spotify_config
+from backend.src.config import get_env_variable
+from backend.src.spotify_client import SpotifyOAuthClient, SpotifyAuthError
+from backend.src.spotify_data import get_recently_played_tracks, SpotifyAPIError
+from backend.src.database import get_db_engine, insert_raw_data, create_tables # Added create_tables for potential one-off setup
 
 # Configure basic logging
-logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
+# More advanced structured logging can be added later as per Module 2.5
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler() # Ensure logs go to stdout/stderr for Cloud Run
+    ]
+)
 logger = logging.getLogger(__name__)
 
 def main():
-    logger.info("Backend service starting...")
+    logger.info("Starting backend data ingestion process...")
+
     try:
-        # Load Spotify configuration
-        client_id, client_secret, refresh_token = load_spotify_config()
-        logger.info("Spotify configuration loaded successfully.")
+        # --- 1. Load Configuration & Initialize Spotify Client ---
+        logger.info("Loading configuration and initializing Spotify client...")
+        client_id = get_env_variable("SPOTIFY_CLIENT_ID")
+        client_secret = get_env_variable("SPOTIFY_CLIENT_SECRET")
+        refresh_token = get_env_variable("SPOTIFY_REFRESH_TOKEN")
 
-        # Instantiate SpotifyOAuthClient
-        spotify_client = SpotifyOAuthClient(
-            client_id=client_id,
-            client_secret=client_secret,
-            refresh_token=refresh_token
-        )
-        logger.info("SpotifyOAuthClient instantiated.")
-
-        # Get new access token
-        logger.info("Attempting to retrieve a new access token...")
+        spotify_client = SpotifyOAuthClient(client_id, client_secret, refresh_token)
         access_token = spotify_client.get_access_token_from_refresh()
-        logger.info(f"Successfully retrieved new access token: {access_token[:20]}...") # Print only a portion for security
+        logger.info("Successfully obtained Spotify access token.")
 
-    except ValueError as ve:
-        logger.error(f"Configuration error: {ve}")
+        # --- 2. Initialize Database Engine ---
+        # (Optional: Create tables if they don't exist - useful for first run or dev)
+        # In a production Cloud Run, you'd typically run migrations/table creation separately.
+        # For this project structure, it's included but can be commented out if DB is pre-configured.
+        try:
+            db_engine = get_db_engine() # Reads DATABASE_URL from config
+            logger.info("Database engine initialized.")
+            # Uncomment the line below if you want the script to attempt table creation on startup.
+            # create_tables(db_engine)
+            # logger.info("Checked/created database tables if they didn't exist.")
+        except Exception as e:
+            logger.error(f"Failed to initialize database engine or create tables: {e}", exc_info=True)
+            # Depending on retry strategy, might re-raise or exit
+            raise
+
+
+        # --- 3. Fetch Recently Played Tracks from Spotify ---
+        logger.info("Fetching recently played tracks from Spotify...")
+        # Default limit is 50 as per spotify_data.py, can be overridden here if needed.
+        raw_spotify_data = get_recently_played_tracks(access_token, limit=50)
+        items_fetched = len(raw_spotify_data.get("items", []))
+        logger.info(f"Fetched {items_fetched} items from Spotify API.")
+
+        if not raw_spotify_data.get("items"):
+            logger.info("No new items found in recently played tracks from Spotify. Nothing to insert.")
+            logger.info("Backend data ingestion process completed successfully (no new data).")
+            return # Exit if no items
+
+        # --- 4. Insert Raw Data into Database ---
+        logger.info("Inserting raw Spotify data into the database...")
+        insert_raw_data(db_engine, raw_spotify_data)
+        logger.info("Successfully inserted raw Spotify data into 'recently_played_tracks_raw' table.")
+
+        logger.info("Backend data ingestion process completed successfully.")
+
+    except SpotifyAuthError as e:
+        logger.error(f"Spotify authentication error: {e}", exc_info=True)
+        # Potentially send alert or exit with specific code
+    except SpotifyAPIError as e:
+        logger.error(f"Spotify API error: {e}", exc_info=True)
+    except ValueError as e: # For config errors or other value issues
+        logger.error(f"Configuration or value error: {e}", exc_info=True)
     except Exception as e:
-        logger.error(f"An error occurred in main: {e}")
-        # In a real application, you might want to handle this more gracefully
-        # or re-raise the exception after logging.
+        logger.error(f"An unexpected error occurred during the ingestion process: {e}", exc_info=True)
+        # Exit with a generic error code or re-raise if appropriate for orchestrator
+    finally:
+        logger.info("Backend data ingestion process finished.")
 
-if __name__ == "__main__":
-    # This part is for local testing.
-    # In a real deployment, you might not have a .env file or might rely on
-    # environment variables set in the deployment environment.
-    # For local testing, ensure you have a backend/.env file with your credentials.
-    logger.info("Running main.py directly for local testing...")
 
-    # Temporarily set dummy env vars if .env is not present or vars are missing for local run
-    # This is to prevent outright crashing if run in an environment without .env
-    # A more robust solution for testing might involve command-line args or a dedicated test script.
-    import os
-    if not (os.getenv("SPOTIFY_CLIENT_ID") and os.getenv("SPOTIFY_CLIENT_SECRET") and os.getenv("SPOTIFY_REFRESH_TOKEN")):
-        logger.warning("One or more Spotify environment variables are not set.")
-        logger.warning("Attempting to run with dummy values for demonstration purposes ONLY.")
-        logger.warning("This will likely fail when calling the Spotify API.")
-        if not os.getenv("SPOTIFY_CLIENT_ID"):
-            os.environ["SPOTIFY_CLIENT_ID"] = "dummy_client_id"
-        if not os.getenv("SPOTIFY_CLIENT_SECRET"):
-            os.environ["SPOTIFY_CLIENT_SECRET"] = "dummy_client_secret"
-        if not os.getenv("SPOTIFY_REFRESH_TOKEN"):
-            os.environ["SPOTIFY_REFRESH_TOKEN"] = "dummy_refresh_token"
-
+if __name__ == '__main__':
+    # This allows the script to be run directly for testing or local execution.
+    # For Cloud Run, the entry point will typically be just calling main().
+    # Ensure .env file is present in the `backend` directory with all required variables:
+    # SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET, SPOTIFY_REFRESH_TOKEN, DATABASE_URL
     main()
