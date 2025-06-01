@@ -2,6 +2,10 @@ import requests
 import logging
 import base64
 
+class SpotifyAuthError(Exception):
+    """Custom exception for Spotify authentication errors."""
+    pass
+
 logger = logging.getLogger(__name__)
 
 class SpotifyOAuthClient:
@@ -24,8 +28,8 @@ class SpotifyOAuthClient:
 
         data = response.json()
         if "access_token" not in data:
-            logger.error("Access token not in response: %s", data)
-            raise Exception("Access token not in response")
+            logger.error("Access token not in response during refresh: %s", data)
+            raise SpotifyAuthError("Access token not found in response during token refresh.")
         return data["access_token"]
 
     def get_initial_refresh_token_manual_flow(self, auth_code, redirect_uri):
@@ -41,8 +45,8 @@ class SpotifyOAuthClient:
 
         data = response.json()
         if "access_token" not in data or "refresh_token" not in data:
-            logger.error("Access token or refresh token not in response: %s", data)
-            raise Exception("Access token or refresh token not in response")
+            logger.error("Access token or refresh token not in response during initial auth: %s", data)
+            raise SpotifyAuthError("Access token or refresh token not found in response during initial authorization.")
 
         self.refresh_token = data["refresh_token"]
         return data["access_token"], data["refresh_token"]
@@ -55,9 +59,9 @@ class SpotifyOAuthClient:
 
     def _handle_response_error(self, response):
         if response.status_code != 200:
-            logger.error(
-                "Error getting token: %s - %s",
-                response.status_code,
-                response.text,
-            )
+            error_message = f"Error getting token: {response.status_code} - {response.text}"
+            logger.error(error_message)
+            if response.status_code in [401, 403]:
+                raise SpotifyAuthError(f"Authentication failed ({response.status_code}): {response.text}")
+            # For other errors, re-raise the original requests.exceptions.HTTPError
             response.raise_for_status()
