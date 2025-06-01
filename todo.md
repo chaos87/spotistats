@@ -31,16 +31,16 @@ This checklist is based on the project specification, broken down into iterative
 
 ### Module 1.2: Database & Schema Foundation (Neon)
 
--   [ ] **Provision Neon PostgreSQL Database**
-    -   [ ] Create a new project/database on Neon.tech.
-    -   [ ] Record the database connection string.
--   [ ] **Create Initial Database Tables (SQL DDL)**
-    -   [ ] Execute SQL DDL for `recently_played_tracks_raw` table.
-    -   [ ] Execute SQL DDL for `artists` table.
-    -   [ ] Execute SQL DDL for `albums` table.
-    -   [ ] Execute SQL DDL for `tracks` table (including `last_played_at` and `spotify_url`).
-    -   [ ] Execute SQL DDL for `listens` table (initial version with `episode_id` as TEXT).
-    -   [ ] Verify table creation using a DB client.
+-   [x] **Provision Neon PostgreSQL Database**
+    -   [x] Create a new project/database on Neon.tech.
+    -   [x] Record the database connection string.
+-   [x] **Create Initial Database Tables (SQL DDL)**
+    -   [x] Execute SQL DDL for `recently_played_tracks_raw` table.
+    -   [x] Execute SQL DDL for `artists` table.
+    -   [x] Execute SQL DDL for `albums` table.
+    -   [x] Execute SQL DDL for `tracks` table (including `last_played_at` and `spotify_url`).
+    -   [x] Execute SQL DDL for `listens` table (initial version with `episode_id` as TEXT).
+    -   [x] Verify table creation using a DB client.
 
 ## Phase 2: Data Ingestion Pipeline (Backend - Python on Cloud Run)
 
