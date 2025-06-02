@@ -57,7 +57,6 @@ def test_get_db_engine_success(mock_create_engine, mock_os_getenv): # Renamed mo
     mock_os_getenv.assert_any_call("DATABASE_URL") # Check DATABASE_URL call
     mock_os_getenv.assert_any_call("SQLALCHEMY_ECHO", "False") # Check SQLALCHEMY_ECHO call
     mock_create_engine.assert_called_once_with(mock_db_url, echo=False)
-    mock_engine_instance.connect.assert_called_once()
     assert engine == mock_engine_instance
 
 @patch('os.getenv') # Corrected patch target

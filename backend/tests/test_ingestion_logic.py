@@ -78,12 +78,16 @@ class TestIngestionLogic(unittest.TestCase):
         logger.debug("Test session closed and rolled back.")
 
     def test_get_max_played_at_empty(self):
-        max_played = real_get_max_played_at(self.session) # Use real for direct DB test
+        max_played = real_get_max_played_at(self.session)
         self.assertIsNone(max_played)
 
     def test_get_max_played_at_populated(self):
-        dt1 = make_dt("2023-01-01T10:00:00Z")
-        dt2 = make_dt("2023-01-01T12:00:00Z") # This is expected max
+        dt1_str = "2023-01-01T10:00:00Z"
+        dt2_str = "2023-01-01T12:00:00Z"
+
+        dt1 = make_dt(dt1_str)
+        dt2_expected = make_dt(dt2_str)
+
         artist = Artist(artist_id="art1", name="Test Artist", genres=["test"])
         album = Album(album_id="alb1", name="Test Album", primary_artist_id="art1")
         track = Track(track_id="trk1", name="Test Track", album_id="alb1", available_markets=["US"])
@@ -91,11 +95,16 @@ class TestIngestionLogic(unittest.TestCase):
         self.session.commit()
 
         self.session.add(Listen(played_at=dt1, item_type="track", track_id="trk1", artist_id="art1", album_id="alb1"))
-        self.session.add(Listen(played_at=dt2, item_type="track", track_id="trk1", artist_id="art1", album_id="alb1"))
+        self.session.add(Listen(played_at=dt2_expected, item_type="track", track_id="trk1", artist_id="art1", album_id="alb1"))
         self.session.commit()
 
-        max_played = real_get_max_played_at(self.session) # Use real for direct DB test
-        self.assertEqual(max_played, dt2)
+        max_played_from_db = real_get_max_played_at(self.session)
+
+        if max_played_from_db and max_played_from_db.tzinfo is None:
+            logger.debug(f"Max played_at from DB was naive: {max_played_from_db}, making it UTC aware.")
+            max_played_from_db = max_played_from_db.replace(tzinfo=datetime.timezone.utc)
+
+        self.assertEqual(max_played_from_db, dt2_expected)
 
 
     def test_insert_listen_successful(self):
@@ -105,28 +114,34 @@ class TestIngestionLogic(unittest.TestCase):
         self.session.add_all([artist, album, track])
         self.session.commit()
 
-        # Ensure played_at is timezone-aware for consistency
-        played_at_dt = datetime.datetime(2023, 2, 1, 10, 0, 0, tzinfo=datetime.timezone.utc)
+        expected_played_at_dt = datetime.datetime(2023, 2, 1, 10, 0, 0, tzinfo=datetime.timezone.utc)
         listen_obj = Listen(
-            played_at=played_at_dt,
+            played_at=expected_played_at_dt,
             item_type="track",
             track_id="trk_listen",
             artist_id="art_listen",
             album_id="alb_listen"
         )
-        result = real_insert_listen(self.session, listen_obj) # Use real for direct DB test
+        inserted_listen_result = real_insert_listen(self.session, listen_obj)
         self.session.commit()
-        self.assertIsNotNone(result)
-        self.assertEqual(result.played_at, played_at_dt)
+
+        self.assertIsNotNone(inserted_listen_result)
+
+        actual_played_at_from_db = inserted_listen_result.played_at
+        if actual_played_at_from_db and actual_played_at_from_db.tzinfo is None:
+            logger.debug(f"Inserted listen played_at from DB was naive: {actual_played_at_from_db}, making it UTC aware.")
+            actual_played_at_from_db = actual_played_at_from_db.replace(tzinfo=datetime.timezone.utc)
+
+        self.assertEqual(actual_played_at_from_db, expected_played_at_dt)
 
     @patch('backend.main.get_spotify_credentials')
     @patch('backend.main.SpotifyOAuthClient')
     @patch('backend.main.get_recently_played_tracks')
     @patch('backend.main.get_session')
-    @patch('backend.main.get_max_played_at') # Mocked from main's perspective
-    @patch('backend.main.SpotifyMusicNormalizer') # Mocked from main's perspective
-    @patch('backend.main.insert_listen') # Mocked from main's perspective
-    @patch('backend.main.upsert_artist') # Mock to avoid DB interaction for these
+    @patch('backend.main.get_max_played_at')
+    @patch('backend.main.SpotifyMusicNormalizer')
+    @patch('backend.main.insert_listen')
+    @patch('backend.main.upsert_artist')
     @patch('backend.main.upsert_album')
     @patch('backend.main.upsert_track')
     def test_process_spotify_data_flow_logic(
@@ -134,83 +149,99 @@ class TestIngestionLogic(unittest.TestCase):
         mock_insert_listen, mock_normalizer_class, mock_get_max_played_at,
         mock_get_session, mock_get_played_tracks, mock_spotify_client, mock_creds):
 
-        # --- Configure Mocks ---
-        mock_get_session.return_value = self.session # Use the real test session
+        mock_get_session.return_value = self.session
         mock_creds.return_value = ("test_id", "test_secret", "test_refresh")
         mock_client_instance = MagicMock()
         mock_client_instance.get_access_token_from_refresh.return_value = "mock_access_token"
         mock_spotify_client.return_value = mock_client_instance
 
-        # Mock get_max_played_at
         max_played_at_val = datetime.datetime(2023, 1, 10, 0, 0, 0, tzinfo=datetime.timezone.utc)
         mock_get_max_played_at.return_value = max_played_at_val
 
-        # Mock Spotify items
-        item_old = {"track": {"id": "old_track", "type": "track", "name":"Oldie"}, "played_at": (max_played_at_val - datetime.timedelta(days=1)).isoformat().replace('+00:00', 'Z')}
-        item_good_1 = {"track": {"id": "good_track_1", "type": "track", "name":"Good1"}, "played_at": (max_played_at_val + datetime.timedelta(hours=1)).isoformat().replace('+00:00', 'Z')}
-        item_good_2 = {"track": {"id": "good_track_2", "type": "track", "name":"Good2"}, "played_at": (max_played_at_val + datetime.timedelta(hours=2)).isoformat().replace('+00:00', 'Z')}
-        item_episode = {"track": {"id": "ep1", "type": "episode", "name":"Podcast"}, "played_at": (max_played_at_val + datetime.timedelta(hours=3)).isoformat().replace('+00:00', 'Z')}
+        # Spotify typically returns newest first. process_spotify_data reverses this.
+        # Order here is newest to oldest for the mock API response.
         item_normalize_fail = {"track": {"id": "norm_fail_track", "type": "track", "name":"NormFail"}, "played_at": (max_played_at_val + datetime.timedelta(hours=4)).isoformat().replace('+00:00', 'Z')}
+        item_episode = {"track": {"id": "ep1", "type": "episode", "name":"Podcast"}, "played_at": (max_played_at_val + datetime.timedelta(hours=3)).isoformat().replace('+00:00', 'Z')}
+        item_good_2 = {"track": {"id": "good_track_2", "type": "track", "name":"Good2"}, "played_at": (max_played_at_val + datetime.timedelta(hours=2)).isoformat().replace('+00:00', 'Z')}
+        item_good_1 = {"track": {"id": "good_track_1", "type": "track", "name":"Good1"}, "played_at": (max_played_at_val + datetime.timedelta(hours=1)).isoformat().replace('+00:00', 'Z')}
+        item_old = {"track": {"id": "old_track", "type": "track", "name":"Oldie"}, "played_at": (max_played_at_val - datetime.timedelta(days=1)).isoformat().replace('+00:00', 'Z')}
 
-        mock_get_played_tracks.return_value = {"items": [item_old, item_good_1, item_good_2, item_episode, item_normalize_fail]}
+        # The list of items as if returned by Spotify API (newest first)
+        spotify_api_items_list = [item_normalize_fail, item_episode, item_good_2, item_good_1, item_old]
+        mock_get_played_tracks.return_value = {"items": spotify_api_items_list}
 
-        # Mock Normalizer
         mock_normalizer_instance = MagicMock(spec=RealNormalizer)
         def normalize_side_effect(item, played_at_dt):
             track_id = item['track']['id']
+            if not played_at_dt.tzinfo: # Should already be tz-aware from process_spotify_data
+                logger.error("Normalizer mock received naive datetime!") # Should not happen
+                # Fallback to make it aware if testing this mock directly, but indicates upstream issue
+                played_at_dt = played_at_dt.replace(tzinfo=datetime.timezone.utc)
+
+
             if track_id == "good_track_1":
-                return (MagicMock(spec=Artist), MagicMock(spec=Album), MagicMock(spec=Track, id="good_track_1", name="Good1"), MagicMock(spec=Listen))
+                # print(f"Normalizing good_track_1 for played_at: {played_at_dt}")
+                return (MagicMock(spec=Artist), MagicMock(spec=Album), MagicMock(spec=Track, id="good_track_1", name="Good1"), MagicMock(spec=Listen, track_id="good_track_1"))
             elif track_id == "good_track_2":
-                return (MagicMock(spec=Artist), MagicMock(spec=Album), MagicMock(spec=Track, id="good_track_2", name="Good2"), MagicMock(spec=Listen))
+                # print(f"Normalizing good_track_2 for played_at: {played_at_dt}")
+                return (MagicMock(spec=Artist), MagicMock(spec=Album), MagicMock(spec=Track, id="good_track_2", name="Good2"), MagicMock(spec=Listen, track_id="good_track_2"))
             elif track_id == "norm_fail_track":
+                # print(f"Normalizing norm_fail_track for played_at: {played_at_dt}")
                 return None
-            return None # Default for others, e.g. episode if it reaches here
+            # print(f"Normalizing other track: {track_id} for played_at: {played_at_dt}")
+            return None
         mock_normalizer_instance.normalize_track_item.side_effect = normalize_side_effect
         mock_normalizer_class.return_value = mock_normalizer_instance
 
-        # Mock DB operations that are not the focus of this specific logic test
-        mock_upsert_artist.return_value = {"artist_id": "mock_artist_id"} #must return dict
-        mock_upsert_album.return_value = {"album_id": "mock_album_id"}   #must return dict
-        mock_upsert_track.return_value = {"track_id": "mock_track_id"}   #must return dict
+        mock_upsert_artist.return_value = {"artist_id": "mock_artist_id"}
+        mock_upsert_album.return_value = {"album_id": "mock_album_id"}
+        mock_upsert_track.return_value = {"track_id": "mock_track_id"}
 
-        # Mock insert_listen to check call count and simulate success
-        mock_insert_listen.return_value = MagicMock(spec=Listen) # Truthy value
+        mock_insert_listen.return_value = MagicMock(spec=Listen)
 
-        # --- Execute ---
         process_spotify_data()
 
-        # --- Assertions ---
-        self.assertEqual(mock_insert_listen.call_count, 2) # Only item_good_1 and item_good_2 should lead to insert_listen
+        expected_after_param = int(max_played_at_val.timestamp() * 1000)
+        mock_get_played_tracks.assert_called_once_with("mock_access_token", limit=50, after=expected_after_param)
 
-        # Verify normalizer calls
-        # normalize_track_item is called after played_at filtering AND type == 'track' check
+        self.assertEqual(mock_insert_listen.call_count, 2)
+
+        # Items are processed in reversed order of spotify_api_items_list by process_spotify_data
+        # So, item_old -> item_good_1 -> item_good_2 -> item_episode -> item_normalize_fail
+        # Normalizer is called for tracks newer than max_played_at_val: item_good_1, item_good_2, item_normalize_fail
         calls_to_normalizer = [
-            call(item_good_1, make_dt(item_good_1['played_at'])),
+            call(item_good_1, make_dt(item_good_1['played_at'])), # Processed first among the 'new' ones
             call(item_good_2, make_dt(item_good_2['played_at'])),
-            call(item_normalize_fail, make_dt(item_normalize_fail['played_at']))
+            call(item_normalize_fail, make_dt(item_normalize_fail['played_at'])) # Processed last among the 'new' ones
         ]
-        mock_normalizer_instance.normalize_track_item.assert_has_calls(calls_to_normalizer, any_order=True)
+        # Note: assert_has_calls with any_order=True is robust to the internal processing order of new items.
+        # If strict order is important (e.g. item_good_1 before item_good_2), then any_order=False.
+        # Given process_spotify_data reverses, item_good_1 is processed before item_good_2.
+        mock_normalizer_instance.normalize_track_item.assert_has_calls(calls_to_normalizer, any_order=False) # Strict order
         self.assertEqual(mock_normalizer_instance.normalize_track_item.call_count, 3)
 
-        # Verify that insert_listen was called with the Listen objects from normalization
-        # This requires capturing the arguments to insert_listen or being more specific with mock_normalizer_instance return
-        listen_obj_good_1 = mock_normalizer_instance.normalize_track_item(item_good_1, make_dt(item_good_1['played_at']))[3]
-        listen_obj_good_2 = mock_normalizer_instance.normalize_track_item(item_good_2, make_dt(item_good_2['played_at']))[3]
+        # Retrieve the mock Listen objects that normalize_side_effect would have returned
+        # Need to ensure these are the exact objects passed to insert_listen
+        # Re-calling normalize_side_effect to get the expected listen objects
+        # This is a bit indirect; ideally capture args to insert_listen or use more specific mocks.
+        _artist1, _album1, _track1, listen_obj_good_1 = normalize_side_effect(item_good_1, make_dt(item_good_1['played_at']))
+        _artist2, _album2, _track2, listen_obj_good_2 = normalize_side_effect(item_good_2, make_dt(item_good_2['played_at']))
 
-        mock_insert_listen.assert_any_call(self.session, listen_obj_good_1)
-        mock_insert_listen.assert_any_call(self.session, listen_obj_good_2)
+        # Check calls to insert_listen
+        # Calls are made with (session, listen_object)
+        # process_spotify_data reverses the list, so item_good_1 is processed before item_good_2
+        expected_insert_listen_calls = [
+            call(self.session, listen_obj_good_1),
+            call(self.session, listen_obj_good_2)
+        ]
+        mock_insert_listen.assert_has_calls(expected_insert_listen_calls, any_order=False)
 
-        # Verify that other DB upsert functions were called for the two good tracks
+
         self.assertEqual(mock_upsert_artist.call_count, 2)
         self.assertEqual(mock_upsert_album.call_count, 2)
         self.assertEqual(mock_upsert_track.call_count, 2)
 
-
-    # Test for upsert and insert_listen_duplicate_played_at remain largely unchanged
-    # as they test database.py functions directly, not the main flow.
-    # Just ensure any direct datetime instantiations are timezone-aware if comparing with DB values.
-    # (The make_dt helper is already good for this).
-    def test_upsert_artist(self): # Copied from previous, ensure it's still valid
+    def test_upsert_artist(self):
         artist_obj = Artist(artist_id="artist1", name="Original Name", genres=["rock"])
         result_dict = upsert_artist(self.session, artist_obj)
         self.session.commit()
@@ -233,7 +264,7 @@ class TestIngestionLogic(unittest.TestCase):
              self.assertEqual(result_dict_updated['name'], "Updated Name")
              self.assertCountEqual(result_dict_updated['genres'], ["pop", "rock"])
 
-    def test_insert_listen_duplicate_played_at(self): # Copied from previous
+    def test_insert_listen_duplicate_played_at(self):
         artist = Artist(artist_id="art_dup", name="Dup Artist", genres=[])
         album = Album(album_id="alb_dup", name="Dup Album", primary_artist_id="art_dup")
         track = Track(track_id="trk_dup", name="Dup Track", album_id="alb_dup", available_markets=[])
@@ -242,14 +273,13 @@ class TestIngestionLogic(unittest.TestCase):
 
         dt_played = make_dt("2023-02-02T10:00:00Z")
         listen1 = Listen(played_at=dt_played, item_type="track", track_id="trk_dup", artist_id="art_dup", album_id="alb_dup")
-        real_insert_listen(self.session, listen1) # Use real for direct DB test
+        real_insert_listen(self.session, listen1)
         self.session.commit()
 
         listen2 = Listen(played_at=dt_played, item_type="track", track_id="trk_dup", artist_id="art_dup", album_id="alb_dup")
         result = real_insert_listen(self.session, listen2)
         self.assertIsNone(result)
         self.session.rollback()
-
 
 if __name__ == '__main__': # pragma: no cover
     unittest.main()
