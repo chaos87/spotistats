@@ -53,7 +53,7 @@ class Listen(Base):
     played_at = Column(DateTime(timezone=True), nullable=False, unique=True)
     item_type = Column(TEXT, nullable=False)
     track_id = Column(TEXT, ForeignKey('tracks.track_id'), nullable=True)
-    episode_id = Column(TEXT, nullable=True)
+    episode_id = Column(TEXT, ForeignKey('podcast_episodes.episode_id'), nullable=True)
     artist_id = Column(TEXT, ForeignKey('artists.artist_id'), nullable=True)
     album_id = Column(TEXT, ForeignKey('albums.album_id'), nullable=True)
 
