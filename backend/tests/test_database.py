@@ -9,7 +9,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from backend.src.database import (
     get_db_engine,
     insert_raw_data,
-    create_tables,
+    init_db, # Changed from create_tables
     RecentlyPlayedTracksRaw,
     Base
 )
@@ -89,9 +89,9 @@ def test_get_db_engine_connection_error(mock_create_engine, mock_get_env_var):
     with pytest.raises(SQLAlchemyError, match="Connection failed"):
         get_db_engine()
 
-# --- Tests for create_tables ---
-def test_create_tables(sqlite_engine):
-    """Test that create_tables runs without error and tables are created."""
+# --- Tests for init_db (formerly create_tables) ---
+def test_create_tables_via_init_db(sqlite_engine): # Renamed function
+    """Test that init_db runs without error and tables are created.""" # Updated docstring
     # The fixture sqlite_engine already calls Base.metadata.create_all(engine)
     # So we just check if the table exists using inspect
     from sqlalchemy import inspect
@@ -100,9 +100,9 @@ def test_create_tables(sqlite_engine):
 
     # We can also try to run it again to ensure it's idempotent
     try:
-        create_tables(sqlite_engine) # Should run without error
+        init_db(sqlite_engine) # Changed to init_db
     except Exception as e:
-        pytest.fail(f"create_tables raised an exception {e} when run on existing tables.")
+        pytest.fail(f"init_db raised an exception {e} when run on existing tables.") # Updated fail message
 
 
 # --- Tests for insert_raw_data ---
