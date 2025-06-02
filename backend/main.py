@@ -1,5 +1,9 @@
+# At the top of main.py
+from backend.src.logging_config import setup_logging
+setup_logging() # Call this early
+
+import logging # Keep this for using logging.getLogger() later
 import os
-import logging
 import datetime
 from sqlalchemy.orm import Session
 from backend.src.database import (
@@ -9,26 +13,42 @@ from backend.src.database import (
 )
 from backend.src.models import Artist, Album, Track, Listen, PodcastSeries, PodcastEpisode
 from backend.src.normalizer import SpotifyItemNormalizer
-# Placeholder functions will remain as they are for this refactoring
-# from backend.src.config import get_spotify_credentials
-# from backend.src.spotify_client import SpotifyOAuthClient
-# from backend.src.spotify_data import get_recently_played_tracks
+from backend.src.exceptions import DatabaseError, ConfigurationError, SpotifyAuthError, SpotifyAPIError # Updated import
+# For this subtask, we'll use the placeholder functions in main.py for Spotify operations,
+# so ConfigurationError for Spotify credentials won't be hit from config.py yet.
+# from backend.src.config import get_spotify_credentials # Would be ideal
+# from backend.src.spotify_client import SpotifyOAuthClient # Would be ideal
+# from backend.src.spotify_data import get_recently_played_tracks # Would be ideal
 
-def get_spotify_credentials():
-    logging.warning("Using placeholder get_spotify_credentials()")
-    return "dummy_client_id", "dummy_client_secret", "dummy_refresh_token"
+# Placeholder get_spotify_credentials - real one would be in config.py
+def get_spotify_credentials(): # In a real scenario, this would be `from backend.src.config import get_spotify_credentials`
+    # This placeholder won't raise ConfigurationError itself.
+    # If SPOTIFY_CLIENT_ID etc. were read here using os.getenv directly and were missing,
+    # it would be the place for ConfigurationError.
+    # For now, we rely on the database URL check in config.py to test ConfigurationError handling.
+    logging.warning("Using placeholder get_spotify_credentials() in main.py")
+    return "dummy_client_id", "dummy_client_secret", "dummy_refresh_token" # These would trigger ConfigurationError if get_env_variable was used here directly
 
-class SpotifyOAuthClient:
+# Placeholder SpotifyOAuthClient - real one in spotify_client.py
+class SpotifyOAuthClient: # In a real scenario, this would be `from backend.src.spotify_client import SpotifyOAuthClient`
     def __init__(self, client_id, client_secret, refresh_token):
-        logging.warning(f"Using placeholder SpotifyOAuthClient with {client_id[:5]}...")
-        self.access_token = "DUMMY_ACCESS_TOKEN_FOR_SUBTASK_MAIN_PY"
+        logging.warning(f"Using placeholder SpotifyOAuthClient in main.py with {client_id[:5]}...")
+        # Real client might raise SpotifyAuthError on init if refresh token is invalid immediately
+        self.access_token = "DUMMY_ACCESS_TOKEN_FOR_SUBTASK_MAIN_PY" # Placeholder token
+
     def get_access_token_from_refresh(self):
-        logging.warning("Using placeholder get_access_token_from_refresh()")
+        # Real method in spotify_client.py raises SpotifyAuthError
+        logging.warning("Using placeholder get_access_token_from_refresh() in main.py")
+        # Simulate an auth error for testing if needed:
+        # raise SpotifyAuthError("Simulated auth error from placeholder client")
         return self.access_token
 
-def get_recently_played_tracks(access_token, limit=50, after=None):
-    logging.warning(f"Using placeholder get_recently_played_tracks() with token {access_token[:5]}..., limit {limit}, after {after}")
-    # Example data from previous version
+# Placeholder get_recently_played_tracks - real one in spotify_data.py
+def get_recently_played_tracks(access_token, limit=50, after=None): # In a real scenario, this would be `from backend.src.spotify_data import get_recently_played_tracks`
+    logging.warning(f"Using placeholder get_recently_played_tracks() in main.py with token {access_token[:5]}..., limit {limit}, after {after}")
+    # Real function might raise SpotifyAPIError or SpotifyAuthError (if token expired mid-request)
+    # Simulate an API error for testing if needed:
+    # raise SpotifyAPIError("Simulated API error from placeholder tracks fetch")
     return {
         "items": [
             {
@@ -45,36 +65,42 @@ def get_recently_played_tracks(access_token, limit=50, after=None):
         ], "next": None
     }
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s')
+# Remove: logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s')
+logger = logging.getLogger(__name__) # Standard way to get logger per module
 
 def process_spotify_data():
-    engine = None  # Initialize before try block
-    db_session = None  # Initialize before try block
+    logger.info("Starting Spotify data processing.") # Example of using the logger
+    engine = None
+    db_session = None
 
     try:
-        engine = get_db_engine()
-        # Optional: init_db(engine) # Typically called once manually, not every run.
-        db_session = get_session(engine)
-
-        # 1. Get Spotify Access Token
+        # Config related calls first (though get_spotify_credentials is a placeholder here)
         client_id, client_secret, refresh_token = get_spotify_credentials()
-        spotify_client = SpotifyOAuthClient(client_id, client_secret, refresh_token)
-        access_token = spotify_client.get_access_token_from_refresh()
+
+        # Database setup
+        engine = get_db_engine() # Can raise DatabaseError (wrapping ConfigurationError or SQLAlchemyError)
+        # init_db(engine) # Typically called once manually. If called, can also raise DatabaseError.
+        db_session = get_session(engine) # Can raise DatabaseError
+
+        # Spotify client setup and token fetch
+        spotify_client = SpotifyOAuthClient(client_id, client_secret, refresh_token) # Placeholder
+        access_token = spotify_client.get_access_token_from_refresh() # Placeholder, real one can raise SpotifyAuthError
 
         if not access_token:
-            logging.error("Failed to get Spotify access token.")
-            # No return here, finally will still execute if db_session is None
-            # If db_session was created before this error, finally should handle it.
-            # However, if this error is critical, might want to ensure db_session is not used.
-            # For now, assume if access_token fails, we might not want to proceed to DB operations.
-            # A 'return' here would skip the main logic but still hit 'finally'.
-            return
+            # This specific check might be redundant if get_access_token_from_refresh always raises on failure.
+            # However, keeping it if a None return is possible for some auth flows.
+            logger.error("Failed to get Spotify access token (access_token is None).")
+            # Depending on desired behavior, this could be a specific custom error too.
+            # For now, it will be caught by generic Exception or lead to issues in get_recently_played_tracks.
+            # If this is considered a critical auth failure, could raise SpotifyAuthError here.
+            raise SpotifyAuthError("Access token was not obtained (is None).")
 
-        logging.info("Successfully obtained Spotify access token.")
 
-        # 2. Get max_played_at from DB
+        logger.info("Successfully obtained Spotify access token.")
+
+        # Main data processing logic
         max_played_at_db = get_max_played_at(db_session)
-        logging.info(f"Max played_at from DB: {max_played_at_db}")
+        logger.info("Max played_at from DB.", extra={"max_played_at": str(max_played_at_db) if max_played_at_db else None})
 
         after_param = None
         if max_played_at_db:
@@ -84,40 +110,48 @@ def process_spotify_data():
         spotify_items_response = get_recently_played_tracks(access_token, limit=50, after=after_param)
 
         if not spotify_items_response or 'items' not in spotify_items_response:
-            logging.warning("No items found in Spotify response or bad response.")
+            logger.warning("No items found in Spotify response or bad response.", extra={"response": spotify_items_response})
             # No 'return' here needed explicitly, flow will go to 'finally'.
             # If db_session exists, it will be closed. If items are empty, commit won't happen.
         else: # Only process if items exist
             spotify_items = spotify_items_response['items']
-            logging.info(f"Fetched {len(spotify_items)} items from Spotify.")
+            logger.info(f"Fetched items from Spotify.", extra={"item_count": len(spotify_items)})
 
             normalizer = SpotifyItemNormalizer() # Updated class name
             new_listens_count = 0
             processed_items_count = 0
 
             for item in reversed(spotify_items): # Process oldest first to maintain played_at order for duplicates
-                # Basic check for essential keys
-                if not item.get('track') or not item.get('played_at'):
-                    logging.warning(f"Skipping item due to missing 'track' or 'played_at': {item}")
+                track_info = item.get('track', {})
+                item_name = track_info.get('name', 'N/A')
+                item_id = track_info.get('id', 'N/A')
+                played_at_raw = item.get('played_at')
+
+                if not track_info or not played_at_raw:
+                    logger.warning("Skipping item due to missing 'track' or 'played_at'.", extra={"item_data": item})
                     continue
 
                 # Check if played_at is newer than max_played_at_db before normalization
                 try:
-                    played_at_dt = datetime.datetime.fromisoformat(item['played_at'].replace('Z', '+00:00'))
+                    played_at_dt = datetime.datetime.fromisoformat(played_at_raw.replace('Z', '+00:00'))
                 except ValueError:
-                    logging.warning(f"Could not parse played_at timestamp: {item['played_at']}. Skipping item.")
+                    logger.warning("Could not parse played_at timestamp. Skipping item.",
+                                   extra={"played_at_raw": played_at_raw, "item_id": item_id, "item_name": item_name})
                     continue
 
                 if max_played_at_db is not None and played_at_dt <= max_played_at_db:
-                    logging.debug(f"Skipping item played at {played_at_dt} as it's not newer than max_played_at_db {max_played_at_db}")
+                    logger.debug("Skipping item as it's not newer than max_played_at_db.",
+                                 extra={"played_at": str(played_at_dt), "max_db": str(max_played_at_db), "item_id": item_id})
                     continue
 
                 processed_items_count += 1
+                logger.debug("Processing item.", extra={"item_id": item_id, "item_name": item_name, "played_at": str(played_at_dt)})
 
                 normalized_item_data = normalizer.normalize_item(item)
 
                 if not normalized_item_data:
-                    logging.warning(f"Normalization failed for item: {item.get('track', {}).get('name', 'N/A')}. Full item: {item}")
+                    logger.warning("Normalization failed for item.",
+                                   extra={"item_name": item_name, "item_id": item_id, "played_at_raw": played_at_raw})
                     continue
 
                 item_type = normalized_item_data['type']
@@ -128,28 +162,28 @@ def process_spotify_data():
                     album_model_obj = normalized_item_data['album']
                     track_model_obj = normalized_item_data['track']
 
-                    # Upsert related entities and get their DB representations (or IDs)
-                    # The upsert functions in database.py return dicts; ensure this matches or adjust
                     db_artist_dict = upsert_artist(db_session, artist_model_obj)
                     db_album_dict = upsert_album(db_session, album_model_obj)
                     db_track_dict = upsert_track(db_session, track_model_obj)
 
                     if not (db_artist_dict and db_album_dict and db_track_dict):
-                        logging.error(f"Failed to upsert artist/album/track for listen of track: {track_model_obj.name if track_model_obj else 'N/A'} played at {listen_model_obj.played_at}. Skipping this listen.")
+                        logger.error("Failed to upsert artist/album/track for listen.",
+                                     extra={"track_name": track_model_obj.name if track_model_obj else 'N/A',
+                                            "played_at": str(listen_model_obj.played_at)})
                         continue
 
-                    # Ensure Listen object has the correct foreign keys from the upserted/fetched entities
                     listen_model_obj.artist_id = db_artist_dict['artist_id']
                     listen_model_obj.album_id = db_album_dict['album_id']
                     listen_model_obj.track_id = db_track_dict['track_id']
-                    # episode_id should already be None from normalizer for tracks
 
                     db_listen = insert_listen(db_session, listen_model_obj)
                     if db_listen:
                         new_listens_count += 1
-                        logging.info(f"Queued for commit: Listen for track '{track_model_obj.name}' played at {listen_model_obj.played_at}")
+                        logger.info("Queued for commit: Listen for track.",
+                                    extra={"track_name": track_model_obj.name, "played_at": str(listen_model_obj.played_at)})
                     else:
-                        logging.warning(f"Failed to queue listen for track '{track_model_obj.name}' (likely duplicate played_at: {listen_model_obj.played_at})")
+                        # This case is handled by insert_listen logging a warning for duplicates
+                        pass # insert_listen already logged the warning
 
                 elif item_type == 'episode':
                     series_model_obj = normalized_item_data['series']
@@ -158,43 +192,82 @@ def process_spotify_data():
                     upsert_podcast_series(db_session, series_model_obj)
                     upsert_podcast_episode(db_session, episode_model_obj)
 
-                    # listen_model_obj.episode_id is already set by the normalizer
-                    # listen_model_obj.track_id, artist_id, album_id are already None
-
                     db_listen = insert_listen(db_session, listen_model_obj)
                     if db_listen:
                         new_listens_count += 1
-                        logging.info(f"Queued for commit: Listen for episode '{episode_model_obj.name}' played at {listen_model_obj.played_at}")
+                        logger.info("Queued for commit: Listen for episode.",
+                                    extra={"episode_name": episode_model_obj.name, "played_at": str(listen_model_obj.played_at)})
                     else:
-                        logging.warning(f"Failed to queue listen for episode '{episode_model_obj.name}' (likely duplicate played_at: {listen_model_obj.played_at})")
+                        # insert_listen already logged the warning
+                        pass
                 else:
-                    logging.warning(f"Unknown item type '{item_type}' from normalizer for item: {item.get('track', {}).get('name', 'N/A')}")
+                    logger.warning("Unknown item type from normalizer.",
+                                   extra={"item_type": item_type, "item_name": item_name, "item_id": item_id})
 
             if new_listens_count > 0:
-                db_session.commit()
-                logging.info(f"Successfully committed {new_listens_count} new listens to the database. Total items processed (newer than max_played_at): {processed_items_count}.")
+                db_session.commit() # Can raise DatabaseError (wrapping SQLAlchemyError)
+                logger.info(f"Successfully committed new listens to the database.",
+                            extra={"new_listen_count": new_listens_count, "processed_item_count": processed_items_count})
             elif processed_items_count > 0 and new_listens_count == 0:
-                 logging.info(f"Processed {processed_items_count} items, but no new listens were added (e.g. all duplicates or normalization issues). No commit performed.")
+                 logger.info("Processed items, but no new listens were added (e.g. all duplicates or normalization issues). No commit performed.",
+                             extra={"processed_item_count": processed_items_count})
             else: # No items processed after filtering, no new listens
-                logging.info("No new items to process or commit.")
+                logger.info("No new items to process or commit.")
 
-    except Exception as e:
-        logging.error(f"An error occurred during data processing: {e}", exc_info=True)
+    except ConfigurationError as e:
+        logger.error("Configuration error encountered.", exc_info=True) # exc_info=True adds stack trace
         if db_session:
             try:
                 db_session.rollback()
-                logging.info("Database session rolled back due to error.")
+                logger.info("Database session rolled back due to ConfigurationError (though unlikely to be active).")
             except Exception as rb_e:
-                logging.error(f"Error during session rollback: {rb_e}", exc_info=True)
+                logger.error("Error during session rollback after ConfigurationError.", exc_info=True, extra={"rollback_error": str(rb_e)})
+    except DatabaseError as e:
+        logger.error("Database error encountered.", exc_info=True)
+        if db_session:
+            try:
+                db_session.rollback()
+                logger.info("Database session rolled back due to DatabaseError.")
+            except Exception as rb_e: # Catch potential error during rollback
+                logger.error("Error during session rollback after DatabaseError.", exc_info=True, extra={"rollback_error": str(rb_e)})
+    except SpotifyAuthError as e:
+        logger.error("Spotify authentication error encountered.", exc_info=True)
+        if db_session:
+            try:
+                db_session.rollback()
+                logger.info("Database session rolled back due to SpotifyAuthError.")
+            except Exception as rb_e:
+                logger.error("Error during session rollback after SpotifyAuthError.", exc_info=True, extra={"rollback_error": str(rb_e)})
+    except SpotifyAPIError as e:
+        logger.error("Spotify API error encountered.", exc_info=True)
+        if db_session:
+            try:
+                db_session.rollback()
+                logger.info("Database session rolled back due to SpotifyAPIError.")
+            except Exception as rb_e:
+                logger.error("Error during session rollback after SpotifyAPIError.", exc_info=True, extra={"rollback_error": str(rb_e)})
+    except Exception as e: # Generic catch-all for unexpected errors
+        logger.error("An unexpected error occurred during data processing.", exc_info=True)
+        if db_session:
+            try:
+                db_session.rollback()
+                logger.info("Database session rolled back due to unexpected error.")
+            except Exception as rb_e:
+                logger.error("Error during session rollback after unexpected error.", exc_info=True, extra={"rollback_error": str(rb_e)})
     finally:
         if db_session:
             try:
                 db_session.close()
-                logging.info("Database session closed.")
-            except Exception as cl_e:
-                logging.error(f"Error during session close: {cl_e}", exc_info=True)
+                logger.info("Database session closed.")
+            except Exception as cl_e: # Catch error during close
+                logger.error("Error during session close.", exc_info=True, extra={"close_error": str(cl_e)})
 
 if __name__ == '__main__':
-    logging.info("Starting Spotify data processing script.")
+    # setup_logging() is already called at the top of the script.
+    # No need to get a new logger here if we use the one defined at module level for these script-level logs.
+    # However, if process_spotify_data() was in another module, it would define its own logger.
+    # For consistency, ensure all logs use a logger instance.
+    script_logger = logging.getLogger(__name__) # Or just use 'logger' if it's meant to be the same.
+    script_logger.info("Spotify data processing script started via __main__.")
     process_spotify_data()
-    logging.info("Spotify data processing script finished.")
+    script_logger.info("Spotify data processing script finished via __main__.")

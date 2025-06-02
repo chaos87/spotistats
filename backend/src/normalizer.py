@@ -1,6 +1,9 @@
 import datetime
+import logging # Added
 from typing import Tuple, Dict, Any, Optional
 from backend.src.models import Artist, Album, Track, Listen, PodcastSeries, PodcastEpisode # Assuming models.py is in backend.src
+
+logger = logging.getLogger(__name__) # Added
 
 def parse_release_date(date_str: str, precision: str) -> datetime.date | None:
     if not date_str:
@@ -18,8 +21,11 @@ def parse_release_date(date_str: str, precision: str) -> datetime.date | None:
             # So, parse as YYYY, then replace month and day with 1.
             dt_obj = datetime.datetime.strptime(date_str, '%Y')
             return dt_obj.date().replace(month=1, day=1)
+        logger.warning("Unknown release_date_precision.", extra={"date_str": date_str, "precision": precision})
         return None # Unknown precision
-    except ValueError: # Handles cases where date_str doesn't match format
+    except ValueError as e: # Handles cases where date_str doesn't match format
+        logger.warning("Could not parse release_date.",
+                       extra={"date_str": date_str, "precision": precision, "error": str(e)})
         return None
 
 class SpotifyItemNormalizer:
@@ -135,14 +141,25 @@ class SpotifyItemNormalizer:
 
     def normalize_item(self, item: dict) -> Optional[Dict[str, Any]]:
         track_data = item.get('track')
+        item_name_for_log = track_data.get('name', 'N/A') if track_data else 'N/A'
+        item_id_for_log = track_data.get('id', 'N/A') if track_data else 'N/A'
+
         if not track_data:
+            logger.warning("Item missing 'track' data, cannot normalize.", extra={"item_data": item})
             return None # Or raise an error, depending on desired handling
 
         played_at_str = item.get('played_at')
         if not played_at_str:
-            # Handle missing played_at if necessary, or assume it's always present
+            logger.warning("Item missing 'played_at' data, cannot normalize.",
+                           extra={"item_name": item_name_for_log, "item_id": item_id_for_log})
             return None # Or raise
-        played_at_datetime = datetime.datetime.fromisoformat(played_at_str.replace('Z', '+00:00'))
+
+        try:
+            played_at_datetime = datetime.datetime.fromisoformat(played_at_str.replace('Z', '+00:00'))
+        except ValueError:
+            logger.warning("Could not parse 'played_at' timestamp during normalization.",
+                           extra={"played_at_raw": played_at_str, "item_name": item_name_for_log, "item_id": item_id_for_log})
+            return None
 
 
         item_type = track_data.get('type')
@@ -166,5 +183,6 @@ class SpotifyItemNormalizer:
                 'listen': listen
             }
         else:
-            # Handle unknown item type, e.g., log a warning or raise an error
+            logger.warning("Unknown item type encountered during normalization.",
+                           extra={"item_type": item_type, "item_name": item_name_for_log, "item_id": item_id_for_log})
             return None
