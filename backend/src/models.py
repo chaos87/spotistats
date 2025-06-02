@@ -73,3 +73,6 @@ class RecentlyPlayedTracksRaw(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     data = Column(JSONB, nullable=False)
     ingestion_timestamp = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
+
+    def __repr__(self):
+        return f"<RecentlyPlayedTracksRaw(id={self.id}, ingestion_timestamp={self.ingestion_timestamp!r})>"
