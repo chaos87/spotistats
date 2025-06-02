@@ -60,6 +60,10 @@ def init_db(engine=None): # pragma: no cover
 
 def get_max_played_at(session) -> Optional[datetime.datetime]:
     max_ts = session.execute(select(func.max(Listen.played_at))).scalar_one_or_none()
+    if max_ts and max_ts.tzinfo is None:
+        # Assume naive datetime from DB is UTC, make it offset-aware.
+        # This is particularly relevant for SQLite which doesn't store TZ info.
+        max_ts = max_ts.replace(tzinfo=datetime.timezone.utc)
     return max_ts
 
 def upsert_artist(session, artist_obj: Artist) -> dict: # Return type changed to dict for now
