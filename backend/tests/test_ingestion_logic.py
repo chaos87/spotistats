@@ -1,3 +1,4 @@
+import os # Added import os
 import unittest
 import datetime
 import logging
@@ -144,6 +145,7 @@ class TestIngestionLogic(unittest.TestCase):
     @patch('backend.main.upsert_artist')
     @patch('backend.main.upsert_album')
     @patch('backend.main.upsert_track')
+    @patch.dict(os.environ, {"DATABASE_URL": TEST_SQLALCHEMY_DATABASE_URL, "LOG_LEVEL": "DEBUG"}) # Added to provide DATABASE_URL
     def test_process_spotify_data_flow_logic(
         self, mock_upsert_track, mock_upsert_album, mock_upsert_artist,
         mock_insert_listen, mock_normalizer_class, mock_get_max_played_at,
@@ -348,6 +350,150 @@ class TestIngestionLogic(unittest.TestCase):
         result = real_insert_listen(self.session, listen2)
         self.assertIsNone(result)
         self.session.rollback()
+
+    def test_upsert_track_last_played_at_logic(self):
+        # Setup: Insert an initial Artist and Album
+        initial_artist = Artist(artist_id="test_artist_lpa", name="Test Artist LPA", genres=["test"])
+        self.session.add(initial_artist)
+        initial_album = Album(album_id="test_album_lpa", name="Test Album LPA", primary_artist_id="test_artist_lpa")
+        self.session.add(initial_album)
+        self.session.commit()
+
+        track_id = "test_track_lpa_1"
+        initial_played_at_str = "2023-01-01T10:00:00Z"
+        initial_played_at_dt = make_dt(initial_played_at_str)
+
+        # Initial Track object
+        initial_track_obj = Track(
+            track_id=track_id,
+            name="Test Track Initial LPA",
+            album_id="test_album_lpa",
+            last_played_at=initial_played_at_dt,
+            available_markets=["US"],
+            duration_ms=180000,
+            explicit=False,
+            popularity=50,
+            preview_url="http://example.com/preview_initial.mp3",
+            spotify_url="http://example.com/track_initial"
+        )
+        # Call upsert_track to insert this initial track
+        returned_track_dict = upsert_track(self.session, initial_track_obj)
+        self.session.commit()
+
+        # Verify initial insertion
+        self.assertIsNotNone(returned_track_dict)
+        self.assertEqual(returned_track_dict["track_id"], track_id)
+        # For SQLite, datetime might come back as string if not handled by type decorator,
+        # or naive if handled by SQLAlchemy's default. make_dt ensures timezone awareness.
+        returned_lpa = make_dt(str(returned_track_dict["last_played_at"])) if isinstance(returned_track_dict["last_played_at"], str) else returned_track_dict["last_played_at"]
+        if returned_lpa.tzinfo is None: # Ensure timezone for comparison
+            returned_lpa = returned_lpa.replace(tzinfo=datetime.timezone.utc)
+        self.assertEqual(returned_lpa, initial_played_at_dt)
+
+        db_track = self.session.query(Track).filter_by(track_id=track_id).one()
+        db_lpa = db_track.last_played_at
+        if db_lpa.tzinfo is None: db_lpa = db_lpa.replace(tzinfo=datetime.timezone.utc) # Ensure timezone
+        self.assertEqual(db_lpa, initial_played_at_dt)
+
+        # Scenario 1: Update with more recent last_played_at
+        more_recent_played_at_str = "2023-01-01T12:00:00Z"
+        more_recent_played_at_dt = make_dt(more_recent_played_at_str)
+        updated_track_obj_recent = Track(
+            track_id=track_id, name="Test Track Updated Recent LPA", album_id="test_album_lpa",
+            last_played_at=more_recent_played_at_dt, available_markets=["US", "CA"] # also update markets to see if other fields update
+        )
+        returned_track_dict_recent = upsert_track(self.session, updated_track_obj_recent)
+        self.session.commit()
+
+        self.assertIsNotNone(returned_track_dict_recent)
+        returned_lpa_recent = make_dt(str(returned_track_dict_recent["last_played_at"])) if isinstance(returned_track_dict_recent["last_played_at"], str) else returned_track_dict_recent["last_played_at"]
+        if returned_lpa_recent.tzinfo is None: returned_lpa_recent = returned_lpa_recent.replace(tzinfo=datetime.timezone.utc)
+        self.assertEqual(returned_lpa_recent, more_recent_played_at_dt)
+        self.assertEqual(returned_track_dict_recent["available_markets"], ["US", "CA"])
+
+
+        db_track_recent = self.session.query(Track).filter_by(track_id=track_id).one()
+        db_lpa_recent = db_track_recent.last_played_at
+        if db_lpa_recent.tzinfo is None: db_lpa_recent = db_lpa_recent.replace(tzinfo=datetime.timezone.utc)
+        self.assertEqual(db_lpa_recent, more_recent_played_at_dt)
+        # Ensure other fields like name are also updated as per normal upsert logic
+        self.assertEqual(db_track_recent.name, "Test Track Updated Recent LPA")
+        self.assertEqual(db_track_recent.available_markets, ["US", "CA"])
+
+
+        # Scenario 2: Attempt update with older last_played_at
+        older_played_at_str = "2023-01-01T08:00:00Z"
+        older_played_at_dt = make_dt(older_played_at_str)
+        updated_track_obj_older = Track(
+            track_id=track_id, name="Test Track Attempt Older LPA", album_id="test_album_lpa",
+            last_played_at=older_played_at_dt
+        )
+        returned_track_dict_older = upsert_track(self.session, updated_track_obj_older)
+        self.session.commit()
+
+        self.assertIsNotNone(returned_track_dict_older)
+        returned_lpa_older = make_dt(str(returned_track_dict_older["last_played_at"])) if isinstance(returned_track_dict_older["last_played_at"], str) else returned_track_dict_older["last_played_at"]
+        if returned_lpa_older.tzinfo is None: returned_lpa_older = returned_lpa_older.replace(tzinfo=datetime.timezone.utc)
+        # last_played_at should NOT have changed, should still be more_recent_played_at_dt
+        self.assertEqual(returned_lpa_older, more_recent_played_at_dt)
+        # However, other fields like 'name' should be updated by the upsert
+        self.assertEqual(returned_track_dict_older["name"], "Test Track Attempt Older LPA")
+
+
+        db_track_older = self.session.query(Track).filter_by(track_id=track_id).one()
+        db_lpa_older = db_track_older.last_played_at
+        if db_lpa_older.tzinfo is None: db_lpa_older = db_lpa_older.replace(tzinfo=datetime.timezone.utc)
+        self.assertEqual(db_lpa_older, more_recent_played_at_dt) # Still the more recent one
+        self.assertEqual(db_track_older.name, "Test Track Attempt Older LPA") # Name should update
+
+        # Scenario 3: Attempt update with same last_played_at
+        # Current DB state for last_played_at is more_recent_played_at_dt
+        updated_track_obj_same = Track(
+            track_id=track_id, name="Test Track Attempt Same LPA", album_id="test_album_lpa",
+            last_played_at=more_recent_played_at_dt # Using the same timestamp
+        )
+        returned_track_dict_same = upsert_track(self.session, updated_track_obj_same)
+        self.session.commit()
+
+        self.assertIsNotNone(returned_track_dict_same)
+        returned_lpa_same = make_dt(str(returned_track_dict_same["last_played_at"])) if isinstance(returned_track_dict_same["last_played_at"], str) else returned_track_dict_same["last_played_at"]
+        if returned_lpa_same.tzinfo is None: returned_lpa_same = returned_lpa_same.replace(tzinfo=datetime.timezone.utc)
+        self.assertEqual(returned_lpa_same, more_recent_played_at_dt) # Should remain unchanged
+        self.assertEqual(returned_track_dict_same["name"], "Test Track Attempt Same LPA")
+
+        db_track_same = self.session.query(Track).filter_by(track_id=track_id).one()
+        db_lpa_same = db_track_same.last_played_at
+        if db_lpa_same.tzinfo is None: db_lpa_same = db_lpa_same.replace(tzinfo=datetime.timezone.utc)
+        self.assertEqual(db_lpa_same, more_recent_played_at_dt)
+        self.assertEqual(db_track_same.name, "Test Track Attempt Same LPA")
+
+        # Scenario 4: Insert a completely new track
+        new_track_id = "test_track_lpa_2_new"
+        new_track_played_at_str = "2023-02-01T10:00:00Z"
+        new_track_played_at_dt = make_dt(new_track_played_at_str)
+        new_track_obj = Track(
+            track_id=new_track_id,
+            name="Completely New Track LPA",
+            album_id="test_album_lpa", # Can use same album
+            last_played_at=new_track_played_at_dt,
+            available_markets=["DE"]
+        )
+        returned_new_track_dict = upsert_track(self.session, new_track_obj)
+        self.session.commit()
+
+        self.assertIsNotNone(returned_new_track_dict)
+        self.assertEqual(returned_new_track_dict["track_id"], new_track_id)
+        returned_lpa_new = make_dt(str(returned_new_track_dict["last_played_at"])) if isinstance(returned_new_track_dict["last_played_at"], str) else returned_new_track_dict["last_played_at"]
+        if returned_lpa_new.tzinfo is None: returned_lpa_new = returned_lpa_new.replace(tzinfo=datetime.timezone.utc)
+        self.assertEqual(returned_lpa_new, new_track_played_at_dt)
+        self.assertEqual(returned_new_track_dict["name"], "Completely New Track LPA")
+
+        db_new_track = self.session.query(Track).filter_by(track_id=new_track_id).one()
+        db_lpa_new = db_new_track.last_played_at
+        if db_lpa_new.tzinfo is None: db_lpa_new = db_lpa_new.replace(tzinfo=datetime.timezone.utc)
+        self.assertEqual(db_lpa_new, new_track_played_at_dt)
+        self.assertEqual(db_new_track.name, "Completely New Track LPA")
+
 
 if __name__ == '__main__': # pragma: no cover
     unittest.main()

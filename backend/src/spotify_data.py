@@ -1,14 +1,19 @@
 import requests
 import logging
+from backend.src.exceptions import SpotifyAPIError # Import from exceptions.py
+from .utils import api_retry_decorator # Import the decorator
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+# Configure logging - This will be removed as setup_logging in main.py handles it.
+# logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
-class SpotifyAPIError(Exception):
-    """Custom exception for Spotify API errors."""
-    pass
 
-def get_recently_played_tracks(access_token: str, limit: int = 50) -> dict:
+# class SpotifyAPIError(Exception): # This is now defined in exceptions.py
+#     """Custom exception for Spotify API errors."""
+#     pass
+
+@api_retry_decorator
+def get_recently_played_tracks(access_token: str, limit: int = 50, after: int = None) -> dict:
     """
     Fetches the user's recently played tracks from the Spotify API.
 
@@ -29,20 +34,31 @@ def get_recently_played_tracks(access_token: str, limit: int = 50) -> dict:
     headers = {
         "Authorization": f"Bearer {access_token}"
     }
-    params = {
+    params = { # Ensure all relevant params are passed through
         "limit": limit
     }
+    if after:
+        params["after"] = after
 
     try:
+        logger.debug("Fetching recently played tracks from Spotify.",
+                     extra={"url": url, "limit": limit, "after": after})
         response = requests.get(url, headers=headers, params=params)
         response.raise_for_status()  # Raises an HTTPError for bad responses (4XX or 5XX)
-        logging.info(f"Successfully fetched {len(response.json().get('items', []))} recently played items from Spotify.")
+
+        num_items = len(response.json().get('items', []))
+        logger.info(f"Successfully fetched recently played items from Spotify.",
+                    extra={"item_count": num_items, "limit_param": limit, "after_param": after})
         return response.json()
     except requests.exceptions.HTTPError as http_err:
-        logging.error(f"HTTP error occurred: {http_err} - {response.text}")
+        logger.error("HTTP error occurred while fetching recently played tracks.",
+                     exc_info=True, # Add exc_info for stack trace
+                     extra={"url": url, "status_code": response.status_code, "response_text": response.text, "error": str(http_err)})
         raise SpotifyAPIError(f"Spotify API request failed with status {response.status_code}: {response.text}") from http_err
     except requests.exceptions.RequestException as req_err:
-        logging.error(f"Request exception occurred: {req_err}")
+        logger.error("Request exception occurred while fetching recently played tracks.",
+                     exc_info=True, # Add exc_info for stack trace
+                     extra={"url": url, "error": str(req_err)})
         raise SpotifyAPIError(f"Spotify API request failed: {req_err}") from req_err
 
 if __name__ == '__main__':

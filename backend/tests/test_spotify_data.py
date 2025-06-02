@@ -1,7 +1,10 @@
 import pytest
 import requests
 import requests_mock
-from backend.src.spotify_data import get_recently_played_tracks, SpotifyAPIError
+import tenacity # Added import for tenacity
+from backend.src.spotify_data import get_recently_played_tracks
+from backend.src.exceptions import SpotifyAPIError # Ensure this is imported from exceptions
+
 
 # Sample successful response from Spotify API
 MOCK_SUCCESS_RESPONSE = {
@@ -88,10 +91,14 @@ def test_get_recently_played_tracks_http_error(mock_spotify_api):
         status_code=500
     )
 
-    with pytest.raises(SpotifyAPIError) as excinfo:
+    # The function is decorated with a retry. If all retries fail, tenacity.RetryError is raised.
+    with pytest.raises(tenacity.RetryError) as excinfo:
         get_recently_played_tracks(access_token, limit=limit)
 
-    assert "Spotify API request failed with status 500" in str(excinfo.value)
+    # Verify the underlying error after retries are exhausted
+    final_exception = excinfo.value.last_attempt.exception()
+    assert isinstance(final_exception, SpotifyAPIError)
+    assert "Spotify API request failed with status 500" in str(final_exception)
 
 def test_get_recently_played_tracks_request_exception(mock_spotify_api):
     """Test handling of general request exceptions (e.g., network error)."""
@@ -99,13 +106,16 @@ def test_get_recently_played_tracks_request_exception(mock_spotify_api):
     limit = 10
     mock_spotify_api.get(
         f"https://api.spotify.com/v1/me/player/recently-played?limit={limit}",
-        exc=requests.exceptions.Timeout("Connection timed out")
+        exc=requests.exceptions.Timeout("Connection timed out") # This is a retryable exception
     )
 
-    with pytest.raises(SpotifyAPIError) as excinfo:
+    # The function is decorated. Expect tenacity.RetryError.
+    with pytest.raises(tenacity.RetryError) as excinfo:
         get_recently_played_tracks(access_token, limit=limit)
 
-    assert "Spotify API request failed: Connection timed out" in str(excinfo.value)
+    final_exception = excinfo.value.last_attempt.exception()
+    assert isinstance(final_exception, SpotifyAPIError)
+    assert "Spotify API request failed: Connection timed out" in str(final_exception)
 
 
 def test_get_recently_played_tracks_invalid_limit_too_low():
