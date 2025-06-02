@@ -40,6 +40,8 @@ def get_session(engine=None):
 
 # This function assumes a session is passed to it and the caller handles commit/rollback
 def insert_raw_data(session, raw_json_data: dict) -> RecentlyPlayedTracksRaw:
+    if not isinstance(raw_json_data, dict):
+        raise TypeError("raw_json_data must be a dictionary")
     # Creates an instance of RecentlyPlayedTracksRaw and adds it to the session.
     # The caller is responsible for committing the session.
     db_record = RecentlyPlayedTracksRaw(data=raw_json_data)
