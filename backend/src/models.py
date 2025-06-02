@@ -60,13 +60,40 @@ class Listen(Base):
     track = relationship("Track", back_populates="listens")
     artist = relationship("Artist", back_populates="listens")
     album = relationship("Album", back_populates="listens")
+    episode = relationship("PodcastEpisode", back_populates="listens")
 
     __table_args__ = (
         CheckConstraint(
-            "(item_type = 'track' AND track_id IS NOT NULL AND episode_id IS NULL) OR (item_type = 'episode' AND episode_id IS NOT NULL AND track_id IS NULL)",
+            """( (item_type = 'track' AND track_id IS NOT NULL AND episode_id IS NULL AND artist_id IS NOT NULL AND album_id IS NOT NULL) OR
+            (item_type = 'episode' AND episode_id IS NOT NULL AND track_id IS NULL AND artist_id IS NULL AND album_id IS NULL) )""",
             name='ck_listen_item_type'
         ),
     )
+
+class PodcastSeries(Base):
+    __tablename__ = 'podcast_series'
+    series_id = Column(TEXT, primary_key=True)
+    name = Column(TEXT, nullable=False)
+    publisher = Column(TEXT)
+    description = Column(TEXT)
+    image_url = Column(TEXT)
+    spotify_url = Column(TEXT)
+
+    episodes = relationship("PodcastEpisode", back_populates="series")
+
+class PodcastEpisode(Base):
+    __tablename__ = 'podcast_episodes'
+    episode_id = Column(TEXT, primary_key=True)
+    name = Column(TEXT, nullable=False)
+    description = Column(TEXT)
+    duration_ms = Column(Integer)
+    explicit = Column(Boolean)
+    release_date = Column(Date)
+    spotify_url = Column(TEXT)
+    series_id = Column(TEXT, ForeignKey('podcast_series.series_id'))
+
+    series = relationship("PodcastSeries", back_populates="episodes")
+    listens = relationship("Listen", back_populates="episode")
 
 class RecentlyPlayedTracksRaw(Base):
     __tablename__ = 'recently_played_tracks_raw'

@@ -1,5 +1,6 @@
 import datetime
-from backend.src.models import Artist, Album, Track, Listen # Assuming models.py is in backend.src
+from typing import Tuple, Dict, Any, Optional
+from backend.src.models import Artist, Album, Track, Listen, PodcastSeries, PodcastEpisode # Assuming models.py is in backend.src
 
 def parse_release_date(date_str: str, precision: str) -> datetime.date | None:
     if not date_str:
@@ -21,12 +22,8 @@ def parse_release_date(date_str: str, precision: str) -> datetime.date | None:
     except ValueError: # Handles cases where date_str doesn't match format
         return None
 
-class SpotifyMusicNormalizer:
-    def normalize_track_item(self, spotify_item: dict, played_at_datetime: datetime.datetime) -> tuple[Artist, Album, Track, Listen] | None:
-        track_data = spotify_item.get('track')
-        if not track_data or track_data.get('type') != 'track':
-            return None
-
+class SpotifyItemNormalizer:
+    def _normalize_track_data(self, track_data: dict, played_at_datetime: datetime.datetime) -> Tuple[Artist, Album, Track, Listen]:
         # Primary Artist
         primary_artist_data = track_data['artists'][0] if track_data.get('artists') and len(track_data['artists']) > 0 else {}
 
@@ -42,7 +39,7 @@ class SpotifyMusicNormalizer:
             name=primary_artist_data.get('name'),
             spotify_url=primary_artist_data.get('external_urls', {}).get('spotify'),
             image_url=artist_image_url,
-            genres=primary_artist_data.get('genres', [])
+            genres=primary_artist_data.get('genres', []) # Assuming genres might not exist
         )
 
         # Album
@@ -64,7 +61,7 @@ class SpotifyMusicNormalizer:
             album_type=album_data.get('album_type'),
             spotify_url=album_data.get('external_urls', {}).get('spotify'),
             image_url=album_image_url,
-            primary_artist_id=artist.artist_id # This will be None if artist_id is None
+            primary_artist_id=artist.artist_id
         )
 
         # Track
@@ -76,19 +73,98 @@ class SpotifyMusicNormalizer:
             popularity=track_data.get('popularity'),
             preview_url=track_data.get('preview_url'),
             spotify_url=track_data.get('external_urls', {}).get('spotify'),
-            album_id=album.album_id, # This will be None if album_id is None
+            album_id=album.album_id,
             available_markets=track_data.get('available_markets', []),
-            last_played_at=played_at_datetime
+            last_played_at=played_at_datetime # This seems to be a listen-specific field
         )
 
-        # Listen
+        # Listen for track
         listen = Listen(
             played_at=played_at_datetime,
-            item_type='track', # Hardcoded as per requirement
-            track_id=track.track_id, # Will be None if track_id is None
-            artist_id=artist.artist_id, # Will be None if artist_id is None
-            album_id=album.album_id,   # Will be None if album_id is None
-            episode_id=None # Hardcoded as per requirement
+            item_type='track',
+            track_id=track.track_id,
+            artist_id=artist.artist_id,
+            album_id=album.album_id,
+            episode_id=None
+        )
+        return artist, album, track, listen
+
+    def normalize_episode_item(self, item: dict) -> Tuple[PodcastSeries, PodcastEpisode, Listen]:
+        episode_data = item['track'] # The 'track' field contains episode details
+        show_data = episode_data['show']
+        played_at_datetime = datetime.datetime.fromisoformat(item['played_at'].replace('Z', '+00:00'))
+
+
+        series_image_url = None
+        if show_data.get('images') and len(show_data['images']) > 0:
+            series_image_url = show_data['images'][0].get('url')
+
+        series = PodcastSeries(
+            series_id=show_data['id'],
+            name=show_data['name'],
+            publisher=show_data.get('publisher'),
+            description=show_data.get('description'),
+            image_url=series_image_url,
+            spotify_url=show_data.get('external_urls', {}).get('spotify')
         )
 
-        return artist, album, track, listen
+        release_date_obj = None
+        if episode_data.get('release_date') and episode_data.get('release_date_precision'):
+            release_date_obj = parse_release_date(episode_data['release_date'], episode_data['release_date_precision'])
+
+        episode = PodcastEpisode(
+            episode_id=episode_data['id'],
+            name=episode_data['name'],
+            description=episode_data.get('description'),
+            duration_ms=episode_data.get('duration_ms'),
+            explicit=episode_data.get('explicit'),
+            release_date=release_date_obj,
+            spotify_url=episode_data.get('external_urls', {}).get('spotify'),
+            series_id=series.series_id
+        )
+
+        listen = Listen(
+            played_at=played_at_datetime,
+            item_type='episode',
+            episode_id=episode.episode_id,
+            track_id=None,
+            artist_id=None,
+            album_id=None
+        )
+        return series, episode, listen
+
+    def normalize_item(self, item: dict) -> Optional[Dict[str, Any]]:
+        track_data = item.get('track')
+        if not track_data:
+            return None # Or raise an error, depending on desired handling
+
+        played_at_str = item.get('played_at')
+        if not played_at_str:
+            # Handle missing played_at if necessary, or assume it's always present
+            return None # Or raise
+        played_at_datetime = datetime.datetime.fromisoformat(played_at_str.replace('Z', '+00:00'))
+
+
+        item_type = track_data.get('type')
+
+        if item_type == 'track':
+            artist, album, track, listen = self._normalize_track_data(track_data, played_at_datetime)
+            return {
+                'type': 'track',
+                'artist': artist,
+                'album': album,
+                'track': track,
+                'listen': listen
+            }
+        elif item_type == 'episode':
+            # The normalize_episode_item expects the full item for 'played_at'
+            series, episode, listen = self.normalize_episode_item(item)
+            return {
+                'type': 'episode',
+                'series': series,
+                'episode': episode,
+                'listen': listen
+            }
+        else:
+            # Handle unknown item type, e.g., log a warning or raise an error
+            return None
