@@ -24,26 +24,27 @@ def is_retryable_api_exception(e: Exception) -> bool:
     # SpotifyAPIError in spotify_client._handle_response_error is now raised for non-400,401,403 client/server errors.
     # And specifically for 5xx errors from requests.raise_for_status()
     if isinstance(e, SpotifyAPIError):
+        # Check if the cause of SpotifyAPIError is a ConnectionError or Timeout
+        if hasattr(e, '__cause__') and isinstance(e.__cause__, (ConnectionError, Timeout)):
+            logger.warning(f"Retrying due to SpotifyAPIError caused by network error: {type(e.__cause__).__name__} - {e.__cause__}")
+            return True
         # If SpotifyAPIError directly wraps a requests.exceptions.RequestException, check its response
-        if hasattr(e, '__cause__') and isinstance(e.__cause__, RequestException):
+        elif hasattr(e, '__cause__') and isinstance(e.__cause__, RequestException):
             original_request_exc = e.__cause__
             if original_request_exc.response is not None:
                 status_code = original_request_exc.response.status_code
                 if status_code == 429: # Rate limiting
-                    logger.warning(f"Retrying due to Spotify API rate limit (429): {e}")
-                    # TODO: Implement handling of 'Retry-After' header if available.
-                    # Tenacity's wait_exponential doesn't inherently support this.
-                    # A custom wait function would be needed.
+                    logger.warning(f"Retrying due to Spotify API rate limit (429), wrapped in SpotifyAPIError: {e}")
                     return True
                 if status_code >= 500 and status_code <= 599: # Server-side errors
-                    logger.warning(f"Retrying due to Spotify API server-side error ({status_code}): {e}")
+                    logger.warning(f"Retrying due to Spotify API server-side error ({status_code}), wrapped in SpotifyAPIError: {e}")
                     return True
-        # If it's a SpotifyAPIError not directly wrapping a RequestException with a response,
-        # it might be a custom one. For now, assume these are not retryable unless specified.
-        logger.debug(f"Non-retryable SpotifyAPIError (not a 429 or 5xx): {e}")
+        # If it's a SpotifyAPIError not matching above, assume not retryable.
+        logger.debug(f"Non-retryable SpotifyAPIError (not a 429, 5xx, or caused by ConnectionError/Timeout): {e}")
         return False
 
-    # Fallback for direct RequestException instances not wrapped by SpotifyAPIError (should be less common now)
+    # Fallback for direct RequestException instances not wrapped by SpotifyAPIError
+    # This should ideally be less common if all API interaction points wrap with SpotifyAPIError.
     if isinstance(e, RequestException) and e.response is not None:
         status_code = e.response.status_code
         if status_code == 429:
