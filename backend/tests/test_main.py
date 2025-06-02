@@ -49,7 +49,7 @@ def setup_happy_path_mocks(
         mock_get_recently_played.return_value = recently_played_return
 
 
-@patch('backend.main.SpotifyMusicNormalizer')
+@patch('backend.main.SpotifyItemNormalizer')
 @patch('backend.main.get_session')
 @patch('backend.main.get_max_played_at')
 @patch('backend.main.upsert_artist')
@@ -85,10 +85,18 @@ def test_main_successful_run(
 
     mock_normalizer_instance = mock_normalizer_class.return_value
     mock_listen_obj = MagicMock(spec=Listen)
-    mock_track_obj = MagicMock(spec=Track, name="Test Track 1")
-    mock_normalizer_instance.normalize_track_item.return_value = (
-        MagicMock(spec=Artist), MagicMock(spec=Album), mock_track_obj, mock_listen_obj
-    )
+    mock_artist_obj = MagicMock(spec=Artist, artist_id="artist_id_1")
+    mock_album_obj = MagicMock(spec=Album, album_id="album_id_1")
+    mock_track_obj = MagicMock(spec=Track, track_id="track_id_1", name="Test Track 1")
+
+    # Mock return value for normalize_item for a track
+    mock_normalizer_instance.normalize_item.return_value = {
+        'type': 'track',
+        'artist': mock_artist_obj,
+        'album': mock_album_obj,
+        'track': mock_track_obj,
+        'listen': mock_listen_obj
+    }
 
     mock_upsert_artist.return_value = {"artist_id": "artist_id_1"}
     mock_upsert_album.return_value = {"album_id": "album_id_1"}
@@ -110,8 +118,8 @@ def test_main_successful_run(
     mock_get_recently_played.assert_called_once_with("mock_access_token", limit=50, after=expected_after_param)
 
     mock_normalizer_class.assert_called_once()
-    parsed_played_at_dt = datetime.datetime.fromisoformat(now_iso.replace('Z', '+00:00'))
-    mock_normalizer_instance.normalize_track_item.assert_called_once_with(spotify_item_good, parsed_played_at_dt)
+    # normalize_item now takes only the item
+    mock_normalizer_instance.normalize_item.assert_called_once_with(spotify_item_good)
 
     mock_upsert_artist.assert_called_once()
     mock_upsert_album.assert_called_once()
@@ -207,7 +215,7 @@ def test_main_handles_db_engine_error(mock_get_db_engine_fails, mock_logging_err
     assert kwargs.get('exc_info') is True
 
 
-@patch('backend.main.SpotifyMusicNormalizer')
+@patch('backend.main.SpotifyItemNormalizer')
 @patch('backend.main.get_session')
 @patch('backend.main.get_max_played_at')
 @patch('backend.main.upsert_artist')
@@ -237,11 +245,18 @@ def test_main_handles_db_insert_error(
 
     mock_normalizer_instance = mock_normalizer_class.return_value
     mock_listen_obj = MagicMock(spec=Listen)
-    mock_track_obj = MagicMock(spec=Track, name="Test Track 1")
-    mock_normalizer_instance.normalize_track_item.return_value = (
-        MagicMock(spec=Artist), MagicMock(spec=Album), mock_track_obj, mock_listen_obj
-    )
+    mock_artist_obj = MagicMock(spec=Artist, artist_id="some_id_artist")
+    mock_album_obj = MagicMock(spec=Album, album_id="some_id_album")
+    mock_track_obj = MagicMock(spec=Track, track_id="some_id_track", name="Test Track 1")
 
+    # Mock return value for normalize_item for a track
+    mock_normalizer_instance.normalize_item.return_value = {
+        'type': 'track',
+        'artist': mock_artist_obj,
+        'album': mock_album_obj,
+        'track': mock_track_obj,
+        'listen': mock_listen_obj
+    }
     mock_upsert_artist.return_value = {"artist_id": "some_id"}
     mock_upsert_album.return_value = {"album_id": "some_id"}
     mock_upsert_track.return_value = {"track_id": "some_id"}

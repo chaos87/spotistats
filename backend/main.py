@@ -2,9 +2,13 @@ import os
 import logging
 import datetime
 from sqlalchemy.orm import Session
-from backend.src.database import get_db_engine, init_db, get_session, get_max_played_at, upsert_artist, upsert_album, upsert_track, insert_listen
-from backend.src.models import Artist, Album, Track, Listen
-from backend.src.normalizer import SpotifyMusicNormalizer
+from backend.src.database import (
+    get_db_engine, init_db, get_session, get_max_played_at,
+    upsert_artist, upsert_album, upsert_track, insert_listen,
+    upsert_podcast_series, upsert_podcast_episode
+)
+from backend.src.models import Artist, Album, Track, Listen, PodcastSeries, PodcastEpisode
+from backend.src.normalizer import SpotifyItemNormalizer
 # Placeholder functions will remain as they are for this refactoring
 # from backend.src.config import get_spotify_credentials
 # from backend.src.spotify_client import SpotifyOAuthClient
@@ -87,63 +91,86 @@ def process_spotify_data():
             spotify_items = spotify_items_response['items']
             logging.info(f"Fetched {len(spotify_items)} items from Spotify.")
 
-            normalizer = SpotifyMusicNormalizer()
+            normalizer = SpotifyItemNormalizer() # Updated class name
             new_listens_count = 0
             processed_items_count = 0
 
-            for item in reversed(spotify_items):
-                played_at_str = item.get('played_at')
-                track_info = item.get('track')
-
-                if not played_at_str or not track_info:
-                    logging.warning(f"Skipping item due to missing played_at or track info: Item details: {item}")
+            for item in reversed(spotify_items): # Process oldest first to maintain played_at order for duplicates
+                # Basic check for essential keys
+                if not item.get('track') or not item.get('played_at'):
+                    logging.warning(f"Skipping item due to missing 'track' or 'played_at': {item}")
                     continue
 
+                # Check if played_at is newer than max_played_at_db before normalization
                 try:
-                    played_at_dt = datetime.datetime.fromisoformat(played_at_str.replace('Z', '+00:00'))
+                    played_at_dt = datetime.datetime.fromisoformat(item['played_at'].replace('Z', '+00:00'))
                 except ValueError:
-                    logging.warning(f"Could not parse played_at timestamp: {played_at_str}")
+                    logging.warning(f"Could not parse played_at timestamp: {item['played_at']}. Skipping item.")
                     continue
 
                 if max_played_at_db is not None and played_at_dt <= max_played_at_db:
                     logging.debug(f"Skipping item played at {played_at_dt} as it's not newer than max_played_at_db {max_played_at_db}")
                     continue
 
-                processed_items_count +=1
-                item_type = track_info.get('type')
+                processed_items_count += 1
+
+                normalized_item_data = normalizer.normalize_item(item)
+
+                if not normalized_item_data:
+                    logging.warning(f"Normalization failed for item: {item.get('track', {}).get('name', 'N/A')}. Full item: {item}")
+                    continue
+
+                item_type = normalized_item_data['type']
+                listen_model_obj = normalized_item_data['listen'] # Common listen object
+
                 if item_type == 'track':
-                    normalized_data = normalizer.normalize_track_item(item, played_at_dt)
-                    if normalized_data is None:
-                        logging.warning(f"Normalization failed for track: {track_info.get('name', 'N/A')}. Item: {item}")
-                        continue
+                    artist_model_obj = normalized_item_data['artist']
+                    album_model_obj = normalized_item_data['album']
+                    track_model_obj = normalized_item_data['track']
 
-                    artist_model_obj, album_model_obj, track_model_obj, listen_model_obj = normalized_data
-
+                    # Upsert related entities and get their DB representations (or IDs)
+                    # The upsert functions in database.py return dicts; ensure this matches or adjust
                     db_artist_dict = upsert_artist(db_session, artist_model_obj)
                     db_album_dict = upsert_album(db_session, album_model_obj)
                     db_track_dict = upsert_track(db_session, track_model_obj)
 
                     if not (db_artist_dict and db_album_dict and db_track_dict):
-                        # This is a critical error for a specific item, might indicate bad data from normalizer or DB issue
-                        # For now, log error and continue with other items rather than full rollback of batch
-                        logging.error(f"Failed to upsert artist/album/track for listen: {track_model_obj.name if track_model_obj else 'N/A'} played at {played_at_dt}. Skipping this listen.")
-                        continue # Skip this listen
+                        logging.error(f"Failed to upsert artist/album/track for listen of track: {track_model_obj.name if track_model_obj else 'N/A'} played at {listen_model_obj.played_at}. Skipping this listen.")
+                        continue
 
+                    # Ensure Listen object has the correct foreign keys from the upserted/fetched entities
                     listen_model_obj.artist_id = db_artist_dict['artist_id']
                     listen_model_obj.album_id = db_album_dict['album_id']
                     listen_model_obj.track_id = db_track_dict['track_id']
+                    # episode_id should already be None from normalizer for tracks
 
                     db_listen = insert_listen(db_session, listen_model_obj)
-
                     if db_listen:
                         new_listens_count += 1
-                        logging.info(f"Queued for commit: Listen for track '{track_model_obj.name}' played at {played_at_dt}")
+                        logging.info(f"Queued for commit: Listen for track '{track_model_obj.name}' played at {listen_model_obj.played_at}")
                     else:
-                        logging.warning(f"Failed to queue listen for track '{track_model_obj.name}' (likely duplicate played_at: {played_at_dt})")
-                else:
-                    logging.debug(f"Skipping item of type '{item_type}': {track_info.get('name', 'N/A')}")
+                        logging.warning(f"Failed to queue listen for track '{track_model_obj.name}' (likely duplicate played_at: {listen_model_obj.played_at})")
 
-            if new_listens_count > 0 : # Only commit if new listens were successfully processed and added
+                elif item_type == 'episode':
+                    series_model_obj = normalized_item_data['series']
+                    episode_model_obj = normalized_item_data['episode']
+
+                    upsert_podcast_series(db_session, series_model_obj)
+                    upsert_podcast_episode(db_session, episode_model_obj)
+
+                    # listen_model_obj.episode_id is already set by the normalizer
+                    # listen_model_obj.track_id, artist_id, album_id are already None
+
+                    db_listen = insert_listen(db_session, listen_model_obj)
+                    if db_listen:
+                        new_listens_count += 1
+                        logging.info(f"Queued for commit: Listen for episode '{episode_model_obj.name}' played at {listen_model_obj.played_at}")
+                    else:
+                        logging.warning(f"Failed to queue listen for episode '{episode_model_obj.name}' (likely duplicate played_at: {listen_model_obj.played_at})")
+                else:
+                    logging.warning(f"Unknown item type '{item_type}' from normalizer for item: {item.get('track', {}).get('name', 'N/A')}")
+
+            if new_listens_count > 0:
                 db_session.commit()
                 logging.info(f"Successfully committed {new_listens_count} new listens to the database. Total items processed (newer than max_played_at): {processed_items_count}.")
             elif processed_items_count > 0 and new_listens_count == 0:

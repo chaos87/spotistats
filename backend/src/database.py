@@ -9,7 +9,7 @@ from sqlalchemy.exc import IntegrityError # Added
 from dotenv import load_dotenv
 
 # Import Base and specific models used by functions in this file
-from backend.src.models import Base, RecentlyPlayedTracksRaw, Artist, Album, Track, Listen # Added Artist, Album, Track, Listen
+from backend.src.models import Base, RecentlyPlayedTracksRaw, Artist, Album, Track, Listen, PodcastSeries, PodcastEpisode # Added Artist, Album, Track, Listen
 
 load_dotenv() # Ensure .env is loaded for DATABASE_URL
 
@@ -60,6 +60,10 @@ def init_db(engine=None): # pragma: no cover
 
 def get_max_played_at(session) -> Optional[datetime.datetime]:
     max_ts = session.execute(select(func.max(Listen.played_at))).scalar_one_or_none()
+    if max_ts and max_ts.tzinfo is None:
+        # Assume naive datetime from DB is UTC, make it offset-aware.
+        # This is particularly relevant for SQLite which doesn't store TZ info.
+        max_ts = max_ts.replace(tzinfo=datetime.timezone.utc)
     return max_ts
 
 def upsert_artist(session, artist_obj: Artist) -> dict: # Return type changed to dict for now
@@ -150,3 +154,40 @@ def insert_listen(session, listen_obj: Listen) -> Optional[Listen]:
         # Caller should handle rollback for the whole transaction
         logger.warning(f"IntegrityError: Could not insert listen record for item played at {listen_obj.played_at}. Might be a duplicate.", exc_info=False) # exc_info=False to reduce noise for expected errors
         return None
+
+def upsert_podcast_series(session, series_obj: PodcastSeries) -> Optional[PodcastSeries]:
+    stmt = pg_insert(PodcastSeries).values(
+        series_id=series_obj.series_id,
+        name=series_obj.name,
+        publisher=series_obj.publisher,
+        description=series_obj.description,
+        image_url=series_obj.image_url,
+        spotify_url=series_obj.spotify_url
+    ).on_conflict_do_nothing(
+        index_elements=[PodcastSeries.series_id]
+    )
+    # .returning() is not strictly needed for DO NOTHING if we don't need the inserted/existing row back
+    # If we wanted to get the row regardless, ON CONFLICT DO UPDATE set ... RETURNING ... would be used
+    # For DO NOTHING, we can execute and then query if needed, or assume it's there / rely on FKs
+    session.execute(stmt)
+    # To confirm it's there or get the object, a select could follow, but often not needed for "do nothing"
+    # For now, let's return the original object if no error, assuming it's now in DB or was already.
+    # A more robust way would be to query it, but that adds overhead.
+    # If the goal is just to ensure it exists, this is fine.
+    return series_obj # Or query and return if specific fields are needed post-insert/conflict.
+
+def upsert_podcast_episode(session, episode_obj: PodcastEpisode) -> Optional[PodcastEpisode]:
+    stmt = pg_insert(PodcastEpisode).values(
+        episode_id=episode_obj.episode_id,
+        name=episode_obj.name,
+        description=episode_obj.description,
+        duration_ms=episode_obj.duration_ms,
+        explicit=episode_obj.explicit,
+        release_date=episode_obj.release_date,
+        spotify_url=episode_obj.spotify_url,
+        series_id=episode_obj.series_id
+    ).on_conflict_do_nothing(
+        index_elements=[PodcastEpisode.episode_id]
+    )
+    session.execute(stmt)
+    return episode_obj # Similar to above, returning the passed object.
