@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, ANY # Import ANY for logging message check
 import logging
 import datetime
 
@@ -190,15 +190,21 @@ def test_main_handles_spotify_api_error(
     mock_get_session.return_value.close.assert_called_once()
 
 
+@patch('backend.main.logging.error') # Added for logging check
 @patch('backend.main.get_db_engine', side_effect=Exception("Simulated DB Connection Error"))
-def test_main_handles_db_engine_error(mock_get_db_engine_fails):
+def test_main_handles_db_engine_error(mock_get_db_engine_fails, mock_logging_error): # Added mock_logging_error
     from backend.main import process_spotify_data
-    try:
-        process_spotify_data()
-    except Exception as e:
-        pytest.fail(f"process_spotify_data() raised an unhandled exception on DB engine error: {e}")
+
+    process_spotify_data() # No try-except block here in the test
 
     mock_get_db_engine_fails.assert_called_once()
+    mock_logging_error.assert_called_once()
+    # Optional: More specific check on what was logged
+    args, kwargs = mock_logging_error.call_args
+    # Example: Check if the log message contains part of the error and exc_info=True
+    # This depends on the exact log message format in main.py
+    assert "Simulated DB Connection Error" in str(args[0]) or "Simulated DB Connection Error" in str(kwargs) # More flexible check
+    assert kwargs.get('exc_info') is True
 
 
 @patch('backend.main.SpotifyMusicNormalizer')
