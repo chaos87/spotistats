@@ -144,3 +144,8 @@ ehthumbs.db
 backend/.env
 cubejs/.env
 frontend/.env.local
+
+# Backend specific
+backend/.DS_Store
+backend/*/__pycache__/
+backend/__pycache__/
