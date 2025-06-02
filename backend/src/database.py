@@ -1,167 +1,152 @@
-import logging
-from sqlalchemy import create_engine, Column, BigInteger, DateTime, func
-from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import declarative_base # Corrected import path
-from sqlalchemy.orm import sessionmaker, Session
-from typing import Dict, Any
+import os
+import datetime # Added
+import logging # Added
+from typing import Optional # Added
+from sqlalchemy import create_engine, select, func # Added select, func
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.dialects.postgresql import insert as pg_insert # Added for ON CONFLICT
+from sqlalchemy.exc import IntegrityError # Added
+from dotenv import load_dotenv
 
-# Assuming config.py exists in the same directory or is accessible in PYTHONPATH
-# and has a function get_env_variable("DATABASE_URL") or similar.
-# For now, let's make a placeholder for where config would be imported from.
-# from .config import get_env_variable # Placeholder if config.py is in the same directory
-# If config.py is in backend/src, then:
-from backend.src.config import get_env_variable # Corrected import path
+# Import Base and specific models used by functions in this file
+from backend.src.models import Base, RecentlyPlayedTracksRaw, Artist, Album, Track, Listen # Added Artist, Album, Track, Listen
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+load_dotenv() # Ensure .env is loaded for DATABASE_URL
 
-Base = declarative_base()
+logger = logging.getLogger(__name__) # Added logger
 
-class RecentlyPlayedTracksRaw(Base):
-    __tablename__ = 'recently_played_tracks_raw'
+def get_database_url():
+    url = os.getenv("DATABASE_URL")
+    if not url:
+        # Fallback or error for local development if .env is not set up
+        print("Warning: DATABASE_URL not found in environment. Using default SQLite DB for local dev.")
+        return "sqlite:///./local_spotify_dashboard.db" # Example fallback
+    return url
 
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
-    data = Column(JSONB, nullable=False)
-    ingestion_timestamp = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+def get_db_engine(db_url=None):
+    if db_url is None:
+        db_url = get_database_url()
+    if not db_url: # Should not happen if get_database_url has a fallback or raises error
+        raise ValueError("Database URL is not set.")
+    # Set echo=True for debugging SQL queries locally if needed
+    return create_engine(db_url, echo=os.getenv("SQLALCHEMY_ECHO", "False").lower() == "true")
 
-    def __repr__(self):
-        return f"<RecentlyPlayedTracksRaw(id={self.id}, ingestion_timestamp='{self.ingestion_timestamp}')>"
+def get_session(engine=None):
+    if engine is None:
+        engine = get_db_engine()
+    # autoflush=False can be useful in some scenarios, autocommit=False is default
+    Session = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    return Session()
 
-def get_db_engine(database_url: str = None):
-    """
-    Creates and returns a SQLAlchemy engine instance.
-    Reads DATABASE_URL from environment variables if not provided.
-    """
-    if database_url is None:
-        database_url = get_env_variable("DATABASE_URL")
-    if not database_url:
-        logging.error("DATABASE_URL environment variable not set.")
-        raise ValueError("DATABASE_URL environment variable not set.")
-
-    logging.info("Creating database engine.")
-    try:
-        engine = create_engine(database_url)
-        # Test connection
-        with engine.connect() as connection:
-            logging.info("Database connection successful.")
-        return engine
-    except Exception as e:
-        logging.error(f"Error creating database engine or connecting: {e}")
-        raise
-
-def insert_raw_data(engine, raw_json_data: Dict[str, Any]) -> None:
-    """
-    Inserts raw JSON data into the recently_played_tracks_raw table.
-
-    Args:
-        engine: The SQLAlchemy engine instance.
-        raw_json_data: A dictionary containing the JSON data from Spotify.
-    """
+# This function assumes a session is passed to it and the caller handles commit/rollback
+def insert_raw_data(session, raw_json_data: dict) -> RecentlyPlayedTracksRaw:
     if not isinstance(raw_json_data, dict):
-        logging.error("raw_json_data must be a dictionary.")
-        raise TypeError("raw_json_data must be a dictionary.")
+        raise TypeError("raw_json_data must be a dictionary")
+    # Creates an instance of RecentlyPlayedTracksRaw and adds it to the session.
+    # The caller is responsible for committing the session.
+    db_record = RecentlyPlayedTracksRaw(data=raw_json_data)
+    session.add(db_record)
+    return db_record # Return the instance if it's useful to the caller
 
-    DBSession = sessionmaker(bind=engine)
-    session: Session = DBSession()
+# A general function to initialize the database (create all tables defined in models.py)
+# This should be called explicitly, e.g., in main.py or a setup script, not automatically on import.
+def init_db(engine=None): # pragma: no cover
+    if engine is None:
+        engine = get_db_engine()
+    # Base.metadata.create_all(engine) will create tables based on models imported from backend.src.models
+    Base.metadata.create_all(engine)
+    print("Database initialized (tables created if they didn't exist).")
 
+
+def get_max_played_at(session) -> Optional[datetime.datetime]:
+    max_ts = session.execute(select(func.max(Listen.played_at))).scalar_one_or_none()
+    return max_ts
+
+def upsert_artist(session, artist_obj: Artist) -> dict: # Return type changed to dict for now
+    # Ensure artist_obj.genres is a list, even if None from model, pg_insert expects list for ARRAY
+    genres = artist_obj.genres if artist_obj.genres is not None else []
+
+    stmt = pg_insert(Artist).values(
+        artist_id=artist_obj.artist_id,
+        name=artist_obj.name,
+        spotify_url=artist_obj.spotify_url,
+        image_url=artist_obj.image_url,
+        genres=genres
+    ).on_conflict_do_update(
+        index_elements=[Artist.artist_id],
+        set_=dict(
+            name=artist_obj.name,
+            spotify_url=artist_obj.spotify_url,
+            image_url=artist_obj.image_url,
+            genres=genres # Use the potentially corrected genres list
+        )
+    ).returning(Artist.artist_id, Artist.name, Artist.spotify_url, Artist.image_url, Artist.genres) # Specify columns
+
+    result_row = session.execute(stmt).fetchone()
+    return result_row._asdict() if result_row else None
+
+def upsert_album(session, album_obj: Album) -> dict: # Return type changed to dict
+    stmt = pg_insert(Album).values(
+        album_id=album_obj.album_id,
+        name=album_obj.name,
+        release_date=album_obj.release_date,
+        album_type=album_obj.album_type,
+        spotify_url=album_obj.spotify_url,
+        image_url=album_obj.image_url,
+        primary_artist_id=album_obj.primary_artist_id
+    ).on_conflict_do_update(
+        index_elements=[Album.album_id],
+        set_=dict(
+            name=album_obj.name,
+            release_date=album_obj.release_date,
+            album_type=album_obj.album_type,
+            spotify_url=album_obj.spotify_url,
+            image_url=album_obj.image_url,
+            primary_artist_id=album_obj.primary_artist_id
+        )
+    ).returning(Album.album_id, Album.name, Album.release_date, Album.album_type, Album.spotify_url, Album.image_url, Album.primary_artist_id)
+    result_row = session.execute(stmt).fetchone()
+    return result_row._asdict() if result_row else None
+
+def upsert_track(session, track_obj: Track) -> dict: # Return type changed to dict
+    # Ensure available_markets is a list
+    available_markets = track_obj.available_markets if track_obj.available_markets is not None else []
+
+    stmt = pg_insert(Track).values(
+        track_id=track_obj.track_id,
+        name=track_obj.name,
+        duration_ms=track_obj.duration_ms,
+        explicit=track_obj.explicit,
+        popularity=track_obj.popularity,
+        preview_url=track_obj.preview_url,
+        spotify_url=track_obj.spotify_url,
+        album_id=track_obj.album_id,
+        available_markets=available_markets,
+        last_played_at=track_obj.last_played_at
+    ).on_conflict_do_update(
+        index_elements=[Track.track_id],
+        set_=dict(
+            name=track_obj.name,
+            duration_ms=track_obj.duration_ms,
+            explicit=track_obj.explicit,
+            popularity=track_obj.popularity,
+            preview_url=track_obj.preview_url,
+            spotify_url=track_obj.spotify_url,
+            album_id=track_obj.album_id,
+            available_markets=available_markets, # Use potentially corrected list
+            last_played_at=track_obj.last_played_at
+        )
+    ).returning(Track.track_id, Track.name, Track.duration_ms, Track.explicit, Track.popularity, Track.preview_url, Track.spotify_url, Track.album_id, Track.available_markets, Track.last_played_at)
+    result_row = session.execute(stmt).fetchone()
+    return result_row._asdict() if result_row else None
+
+
+def insert_listen(session, listen_obj: Listen) -> Optional[Listen]:
     try:
-        new_raw_record = RecentlyPlayedTracksRaw(data=raw_json_data)
-        session.add(new_raw_record)
-        session.commit()
-        logging.info(f"Successfully inserted raw data record with ID: {new_raw_record.id}")
-    except Exception as e:
-        session.rollback()
-        logging.error(f"Error inserting raw data: {e}")
-        raise
-    finally:
-        session.close()
-
-# Example of how to create tables (typically run once, not in the main script flow)
-def create_tables(engine):
-    """Creates all tables defined by Base metadata (if they don't exist)."""
-    try:
-        Base.metadata.create_all(engine)
-        logging.info("Tables created successfully (if they didn't exist).")
-    except Exception as e:
-        logging.error(f"Error creating tables: {e}")
-        raise
-
-if __name__ == '__main__':
-    # This block is for demonstration and manual testing.
-    # It requires a .env file with DATABASE_URL.
-
-    # Create a .env file in the backend directory with:
-    # DATABASE_URL="postgresql://user:password@host:port/database"
-
-    print("Running database.py for demonstration...")
-
-    try:
-        # 1. Get engine (ensure .env is set up for this to work)
-        # You might need to run this from the root of the project or adjust PYTHONPATH
-        # for 'from backend.src.config import get_env_variable' to work.
-        # If running directly within backend/src, use 'from config import get_env_variable'
-        # For this subtask, assume it's run in an environment where backend.src.config is findable.
-
-        # To make this runnable for demo, we might need to temporarily adjust path or use a direct import.
-        # For now, let's assume get_env_variable can be called.
-        # If config.py is:
-        # backend/
-        #   src/
-        #     config.py
-        #     database.py
-        # then `from .config import get_env_variable` or `from config import get_env_variable`
-        # would work if database.py is run as `python -m backend.src.database` from project root.
-        # The `from backend.src.config import get_env_variable` is for when other modules import this.
-
-        # Let's simulate getting the URL for direct script execution for now
-        import os
-        from dotenv import load_dotenv
-
-        # Load .env from the parent directory relative to src (i.e., from 'backend/')
-        dotenv_path = os.path.join(os.path.dirname(__file__), '..', '.env')
-        if os.path.exists(dotenv_path):
-            load_dotenv(dotenv_path)
-            print(f"Loaded .env file from {dotenv_path}")
-        else:
-            print(f".env file not found at {dotenv_path}, ensure it exists with DATABASE_URL.")
-            # Fallback to os.environ.get if .env is not in the expected place for direct run
-
-        db_url_for_demo = os.environ.get("DATABASE_URL")
-
-        if not db_url_for_demo:
-            print("DATABASE_URL not found in environment for demo. Please set it in backend/.env")
-        else:
-            print(f"Using DATABASE_URL: {db_url_for_demo[:db_url_for_demo.find('@')]}...") # Avoid printing password
-
-            engine = get_db_engine(db_url_for_demo)
-
-            # 2. Create tables (optional, run once if tables don't exist)
-            # Make sure your PostgreSQL server is running and accessible.
-            print("Attempting to create tables (if they don't exist)...")
-            create_tables(engine)
-
-            # 3. Insert some dummy raw data
-            print("Attempting to insert dummy raw data...")
-            sample_data = {
-                "items": [{"track": {"name": "Demo Track"}, "played_at": "2023-01-01T00:00:00Z"}],
-                "limit": 1
-            }
-            insert_raw_data(engine, sample_data)
-            print("Dummy raw data insertion attempt complete.")
-
-            # 4. Query to verify (optional)
-            DBSession = sessionmaker(bind=engine)
-            session = DBSession()
-            records = session.query(RecentlyPlayedTracksRaw).order_by(RecentlyPlayedTracksRaw.id.desc()).limit(5).all()
-            print(f"Found {len(records)} records in recently_played_tracks_raw (showing max 5 most recent):")
-            for rec in records:
-                print(rec)
-            session.close()
-
-    except ValueError as ve:
-        print(f"Configuration Error: {ve}")
-    except ImportError as ie:
-        print(f"Import Error: {ie}. Make sure you are in the correct directory or PYTHONPATH is set.")
-        print("If running this file directly, ensure backend/src/config.py exists and is importable.")
-    except Exception as e:
-        print(f"An error occurred during demonstration: {e}")
+        session.add(listen_obj)
+        session.flush()
+        return listen_obj
+    except IntegrityError:
+        # Caller should handle rollback for the whole transaction
+        logger.warning(f"IntegrityError: Could not insert listen record for item played at {listen_obj.played_at}. Might be a duplicate.", exc_info=False) # exc_info=False to reduce noise for expected errors
+        return None
