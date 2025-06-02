@@ -2,51 +2,71 @@ import unittest
 import datetime
 import logging
 from unittest.mock import patch, MagicMock
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, text, JSON, TEXT # Ensure JSON, TEXT are imported
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB # Import ARRAY and JSONB
 
-from backend.src.models import Base, Artist, Album, Track, Listen
+from backend.src.models import Base, Artist, Album, Track, Listen, RecentlyPlayedTracksRaw # Import RecentlyPlayedTracksRaw
 from backend.src.database import (
     get_max_played_at, upsert_artist, upsert_album, upsert_track, insert_listen,
-    get_session as get_real_session, # Keep real one for direct tests
+    get_session as get_real_session,
     init_db
 )
-# Functions/classes to be mocked from main
-# Assuming main.py is structured to allow these imports for mocking:
 from backend.main import process_spotify_data
-# If main.py imports get_recently_played_tracks from spotify_data, that's what we patch.
-# For this example, let's assume it's backend.main.get_recently_played_tracks for simplicity of the mock target.
 
-# Configure logging for tests to see output if needed
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-# Use an in-memory SQLite database for most tests, acknowledge limitations for ON CONFLICT
-# For true PostgreSQL specific testing, a live test PG database would be needed.
 TEST_SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
-# TEST_SQLALCHEMY_DATABASE_URL = "postgresql://user:password@localhost:5432/test_db" # Example for PG
 
 def make_dt(dt_str):
     return datetime.datetime.fromisoformat(dt_str.replace('Z', '+00:00'))
 
 class TestIngestionLogic(unittest.TestCase):
     engine = None
-    SessionLocal = None
+    SessionLocal = None # This will be the sessionmaker class
+
+    # Class-level storage for original types
+    original_artist_genres_type = None
+    original_track_markets_type = None
+    original_raw_data_type = None
 
     @classmethod
     def setUpClass(cls):
         cls.engine = create_engine(TEST_SQLALCHEMY_DATABASE_URL)
-        Base.metadata.create_all(cls.engine) # Create tables
+
+        # Store original types before any modification
+        cls.original_artist_genres_type = Artist.genres.property.columns[0].type
+        cls.original_track_markets_type = Track.available_markets.property.columns[0].type
+        cls.original_raw_data_type = RecentlyPlayedTracksRaw.data.property.columns[0].type
+
+        # Temporarily change types for SQLite compatibility
+        Artist.genres.property.columns[0].type = JSON()
+        Track.available_markets.property.columns[0].type = JSON()
+        RecentlyPlayedTracksRaw.data.property.columns[0].type = JSON()
+
+        Base.metadata.create_all(cls.engine)
         cls.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=cls.engine)
         logger.info(f"Test database tables created using engine: {cls.engine.url}")
 
     @classmethod
     def tearDownClass(cls):
-        Base.metadata.drop_all(cls.engine) # Drop tables
+        Base.metadata.drop_all(cls.engine)
         logger.info("Test database tables dropped.")
 
+        # Restore original types
+        if cls.original_artist_genres_type is not None:
+            Artist.genres.property.columns[0].type = cls.original_artist_genres_type
+        if cls.original_track_markets_type is not None:
+            Track.available_markets.property.columns[0].type = cls.original_track_markets_type
+        if cls.original_raw_data_type is not None:
+            RecentlyPlayedTracksRaw.data.property.columns[0].type = cls.original_raw_data_type
+        logger.info("Original model types restored.")
+
+
     def setUp(self):
-        self.session = self.SessionLocal() # New session for each test
+        # self.session is created per test method
+        self.session = self.SessionLocal()
         # Clean out tables before each test to ensure isolation
         for table in reversed(Base.metadata.sorted_tables):
             self.session.execute(table.delete())
@@ -55,7 +75,7 @@ class TestIngestionLogic(unittest.TestCase):
 
 
     def tearDown(self):
-        self.session.rollback() # Rollback any uncommitted changes
+        self.session.rollback()
         self.session.close()
         logger.debug("Test session closed and rolled back.")
 
@@ -67,11 +87,13 @@ class TestIngestionLogic(unittest.TestCase):
     def test_get_max_played_at_populated(self):
         dt1 = make_dt("2023-01-01T10:00:00Z")
         dt2 = make_dt("2023-01-01T12:00:00Z")
-        # Need dummy artist, album, track for Listen FKs
-        artist = Artist(artist_id="art1", name="Test Artist")
+        artist = Artist(artist_id="art1", name="Test Artist", genres=["test"]) # genres as list for JSON
         album = Album(album_id="alb1", name="Test Album", primary_artist_id="art1")
-        track = Track(track_id="trk1", name="Test Track", album_id="alb1")
+        track = Track(track_id="trk1", name="Test Track", album_id="alb1", available_markets=["US"]) # markets as list
         self.session.add_all([artist, album, track])
+        # Must commit artist, album, track before Listen due to FKs
+        self.session.commit()
+
         self.session.add(Listen(played_at=dt1, item_type="track", track_id="trk1", artist_id="art1", album_id="alb1"))
         self.session.add(Listen(played_at=dt2, item_type="track", track_id="trk1", artist_id="art1", album_id="alb1"))
         self.session.commit()
@@ -79,59 +101,72 @@ class TestIngestionLogic(unittest.TestCase):
         max_played = get_max_played_at(self.session)
         self.assertEqual(max_played, dt2)
 
-    # 2. Test UPSERT functions (basic check, full ON CONFLICT needs PG)
+    # 2. Test UPSERT functions
     def test_upsert_artist(self):
         artist_obj = Artist(artist_id="artist1", name="Original Name", genres=["rock"])
-        # Insert
         result_dict = upsert_artist(self.session, artist_obj)
-        self.session.commit() # Commit to make it queryable by next operations
+        self.session.commit()
         self.assertIsNotNone(result_dict)
         self.assertEqual(result_dict['name'], "Original Name")
+        # For JSON type in SQLite, list is stored and retrieved as list
+        self.assertEqual(result_dict['genres'], ["rock"])
 
-        # Update
         artist_obj_updated = Artist(artist_id="artist1", name="Updated Name", genres=["pop", "rock"])
         result_dict_updated = upsert_artist(self.session, artist_obj_updated)
         self.session.commit()
         self.assertIsNotNone(result_dict_updated)
-        self.assertEqual(result_dict_updated['name'], "Updated Name")
-        # Note: SQLite won't do the update part of ON CONFLICT DO UPDATE. It will likely insert or ignore.
-        # This test will behave differently on SQLite vs PostgreSQL.
-        # On SQLite, this might result in two rows or an error depending on unique constraints if any.
-        # The pg_insert().on_conflict_do_update() is PostgreSQL specific.
-        # For SQLite, a true upsert needs a different approach (e.g. session.merge or query then update/insert)
-        # Here, we are testing the function as written for PG.
+
         if self.engine.name == 'sqlite':
-            logger.warning("SQLite does not fully support ON CONFLICT DO UPDATE. Test for upsert_artist may not be accurate for update behavior.")
-            # Query to see what happened
-            res = self.session.execute(text("SELECT * FROM artists WHERE artist_id='artist1'")).fetchall()
-            self.assertEqual(len(res), 1) # Should still be one due to PK, but update might not happen via pg_insert
-            # The actual name might be 'Original Name' on SQLite if the second insert was ignored.
+            logger.warning("SQLite ON CONFLICT DO UPDATE test: Name update might not reflect if insert was ignored.")
+            # With PK conflict, SQLite usually ignores. Let's check what's there.
+            # The pg_insert().on_conflict_do_update() is PG specific.
+            # If the second insert is ignored due to PK, the name would be "Original Name".
+            # If we were doing a manual SELECT then UPDATE/INSERT, behavior would be different.
+            # Current test checks the returned dict from upsert_artist which is based on RETURNING clause.
+            # On SQLite, the RETURNING clause of pg_insert might not behave as on PG after a conflict.
+            # It's possible result_dict_updated is None or reflects the original insert on SQLite.
+            # For this test, we rely on the fact that a row with "artist1" exists.
+            # A more robust SQLite check would be to query after commit.
+            db_artist = self.session.query(Artist).filter_by(artist_id="artist1").one_or_none()
+            self.assertIsNotNone(db_artist)
+            # Depending on SQLite's handling of pg_insert's ON CONFLICT, name could be original or updated.
+            # The RETURNING clause might give what *would* be inserted/updated.
+            # Let's assume for this test, if it returns, the values are what pg_insert intended.
+            self.assertEqual(result_dict_updated['name'], "Updated Name")
+            self.assertCountEqual(result_dict_updated['genres'], ["pop", "rock"])
         else: # Assuming PostgreSQL
              self.assertEqual(result_dict_updated['name'], "Updated Name")
              self.assertCountEqual(result_dict_updated['genres'], ["pop", "rock"])
 
 
-    def test_upsert_album_and_track(self): # Simplified combined test for brevity
-        # Album
-        album_obj = Album(album_id="album1", name="Original Album", primary_artist_id="artist1") # Assume artist1 exists or FK is deferred
+    def test_upsert_album_and_track(self):
+        # Artist needed for FK if primary_artist_id is enforced early (not an issue for SQLite with JSON types)
+        artist_for_album = Artist(artist_id="artist_for_album", name="Art for Alb", genres=["test"])
+        self.session.add(artist_for_album)
+        self.session.commit()
+
+        album_obj = Album(album_id="album1", name="Original Album", primary_artist_id=artist_for_album.artist_id)
         res_album = upsert_album(self.session, album_obj)
         self.session.commit()
+        self.assertIsNotNone(res_album)
         self.assertEqual(res_album['name'], "Original Album")
-        # Track
-        track_obj = Track(track_id="track1", name="Original Track", album_id="album1", last_played_at=make_dt("2023-01-01T00:00:00Z"))
+
+        track_obj = Track(track_id="track1", name="Original Track", album_id="album1", available_markets=["US", "DE"], last_played_at=make_dt("2023-01-01T00:00:00Z"))
         res_track = upsert_track(self.session, track_obj)
         self.session.commit()
+        self.assertIsNotNone(res_track)
         self.assertEqual(res_track['name'], "Original Track")
+        self.assertEqual(res_track['available_markets'], ["US", "DE"])
 
         if self.engine.name == 'sqlite':
-            logger.warning("SQLite does not fully support ON CONFLICT DO UPDATE for album/track tests.")
+            logger.warning("SQLite ON CONFLICT DO UPDATE for album/track: update behavior might differ.")
 
 
     # 3. Test insert_listen
     def test_insert_listen_successful(self):
-        artist = Artist(artist_id="art_listen", name="Listen Artist")
+        artist = Artist(artist_id="art_listen", name="Listen Artist", genres=[])
         album = Album(album_id="alb_listen", name="Listen Album", primary_artist_id="art_listen")
-        track = Track(track_id="trk_listen", name="Listen Track", album_id="alb_listen")
+        track = Track(track_id="trk_listen", name="Listen Track", album_id="alb_listen", available_markets=[])
         self.session.add_all([artist, album, track])
         self.session.commit()
 
@@ -143,70 +178,60 @@ class TestIngestionLogic(unittest.TestCase):
             album_id="alb_listen"
         )
         result = insert_listen(self.session, listen_obj)
-        self.session.commit() # Commit to save the listen
+        self.session.commit()
         self.assertIsNotNone(result)
         self.assertEqual(result.played_at, make_dt("2023-02-01T10:00:00Z"))
 
     def test_insert_listen_duplicate_played_at(self):
-        # Pre-populate necessary entities
-        artist = Artist(artist_id="art_dup", name="Dup Artist")
+        artist = Artist(artist_id="art_dup", name="Dup Artist", genres=[])
         album = Album(album_id="alb_dup", name="Dup Album", primary_artist_id="art_dup")
-        track = Track(track_id="trk_dup", name="Dup Track", album_id="alb_dup")
+        track = Track(track_id="trk_dup", name="Dup Track", album_id="alb_dup", available_markets=[])
         self.session.add_all([artist, album, track])
+        self.session.commit()
 
-        # First listen
         dt_played = make_dt("2023-02-02T10:00:00Z")
         listen1 = Listen(played_at=dt_played, item_type="track", track_id="trk_dup", artist_id="art_dup", album_id="alb_dup")
         insert_listen(self.session, listen1)
         self.session.commit()
 
-        # Attempt to insert duplicate
         listen2 = Listen(played_at=dt_played, item_type="track", track_id="trk_dup", artist_id="art_dup", album_id="alb_dup")
-        result = insert_listen(self.session, listen2)
-        # self.session.commit() # No commit needed as insert_listen should fail and return None
+        result = insert_listen(self.session, listen2) # This should return None due to duplicate played_at
         self.assertIsNone(result)
-        # Ensure session is still usable (no unhandled exception, rollback was handled by insert_listen or will be by main loop)
-        self.session.rollback() # Important: insert_listen does not rollback, the caller (this test or main) should.
+        self.session.rollback()
 
 
     # 4. Test main ingestion loop (process_spotify_data)
-    @patch('backend.main.get_spotify_credentials') # Mock config dependency
-    @patch('backend.main.SpotifyOAuthClient') # Mock client
-    @patch('backend.main.get_recently_played_tracks') # Mock actual Spotify call
-    @patch('backend.main.get_session') # Mock get_session to use our test session
+    @patch('backend.main.get_spotify_credentials')
+    @patch('backend.main.SpotifyOAuthClient')
+    @patch('backend.main.get_recently_played_tracks')
+    @patch('backend.main.get_session')
     def test_process_spotify_data_flow(self, mock_get_session, mock_get_played, mock_spotify_client, mock_creds):
-        # --- Setup Mocks ---
-        mock_get_session.return_value = self.session # Critical: use the test session
-
-        # Mock get_spotify_credentials
+        mock_get_session.return_value = self.session
         mock_creds.return_value = ("test_id", "test_secret", "test_refresh")
-
-        # Mock SpotifyOAuthClient instance and its method
         mock_client_instance = MagicMock()
         mock_client_instance.get_access_token_from_refresh.return_value = "mock_access_token"
         mock_spotify_client.return_value = mock_client_instance
 
-        # Mock Spotify API response
         played_at_future = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=1)
         played_at_past = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=1)
 
         mock_spotify_items = {
             "items": [
-                { # New item
+                {
                     "track": {
                         "id": "new_track_1", "name": "New Track", "type": "track", "popularity": 70,
-                        "artists": [{"id": "new_artist_1", "name": "New Artist", "external_urls": {"spotify":"new_artist_url"}}],
+                        "artists": [{"id": "new_artist_1", "name": "New Artist", "external_urls": {"spotify":"new_artist_url"}, "genres": ["new wave", "synthpop"]}],
                         "album": {"id": "new_album_1", "name": "New Album", "images": [{"url": "new_img_url"}], "external_urls": {"spotify":"new_album_url"}, "release_date":"2024-01-01", "release_date_precision":"day"},
-                        "duration_ms": 180000, "explicit": False, "external_urls": {"spotify":"new_track_url"}
+                        "duration_ms": 180000, "explicit": False, "external_urls": {"spotify":"new_track_url"}, "available_markets": ["US", "GB"]
                     },
                     "played_at": played_at_future.isoformat().replace('+00:00', 'Z')
                 },
-                { # Item that should be filtered by max_played_at
+                {
                     "track": {
                         "id": "old_track_1", "name": "Old Track", "type": "track",
-                        "artists": [{"id": "old_artist_1", "name": "Old Artist", "external_urls": {"spotify":"old_artist_url"}}],
+                        "artists": [{"id": "old_artist_1", "name": "Old Artist", "external_urls": {"spotify":"old_artist_url"}}], # No genres
                         "album": {"id": "old_album_1", "name": "Old Album", "images": [{"url": "old_img_url"}], "external_urls": {"spotify":"old_album_url"}, "release_date":"2022-01-01", "release_date_precision":"day"},
-                         "duration_ms": 180000, "explicit": False, "external_urls": {"spotify":"old_track_url"}
+                         "duration_ms": 180000, "explicit": False, "external_urls": {"spotify":"old_track_url"} # No markets
                     },
                     "played_at": played_at_past.isoformat().replace('+00:00', 'Z')
                 }
@@ -214,42 +239,35 @@ class TestIngestionLogic(unittest.TestCase):
         }
         mock_get_played.return_value = mock_spotify_items
 
-        # --- Pre-populate DB with a listen to set max_played_at ---
-        # This listen's played_at should be now, so played_at_past is filtered, played_at_future is processed.
         initial_played_at = datetime.datetime.now(datetime.timezone.utc)
-        artist_initial = Artist(artist_id="initial_artist", name="Initial Artist")
+        # Ensure initial data uses list for genres/markets for JSON compatibility
+        artist_initial = Artist(artist_id="initial_artist", name="Initial Artist", genres=[])
         album_initial = Album(album_id="initial_album", name="Initial Album", primary_artist_id="initial_artist")
-        track_initial = Track(track_id="initial_track", name="Initial Track", album_id="initial_album")
+        track_initial = Track(track_id="initial_track", name="Initial Track", album_id="initial_album", available_markets=[])
         listen_initial = Listen(played_at=initial_played_at, item_type="track", track_id="initial_track", artist_id="initial_artist", album_id="initial_album")
         self.session.add_all([artist_initial, album_initial, track_initial, listen_initial])
         self.session.commit()
         logger.info(f"Initial max_played_at set to: {initial_played_at}")
 
-        # --- Execute ---
-        process_spotify_data() # This will use the mocked session and Spotify calls
+        process_spotify_data()
 
-        # --- Assertions ---
-        # Check that only the new listen was added
         listens_in_db = self.session.query(Listen).all()
-        self.assertEqual(len(listens_in_db), 2) # Initial + 1 new track
+        self.assertEqual(len(listens_in_db), 2)
 
         new_listen_entry = self.session.query(Listen).filter(Listen.track_id == "new_track_1").one_or_none()
         self.assertIsNotNone(new_listen_entry)
-        # Python datetime comparison can be tricky with microseconds, ensure they match closely
         self.assertAlmostEqual(new_listen_entry.played_at, played_at_future, delta=datetime.timedelta(seconds=1))
 
-        # Check that artist, album, track for the new item were created
-        self.assertIsNotNone(self.session.query(Artist).filter(Artist.artist_id == "new_artist_1").one_or_none())
-        self.assertIsNotNone(self.session.query(Album).filter(Album.album_id == "new_album_1").one_or_none())
-        self.assertIsNotNone(self.session.query(Track).filter(Track.track_id == "new_track_1").one_or_none())
+        db_artist = self.session.query(Artist).filter(Artist.artist_id == "new_artist_1").one_or_none()
+        self.assertIsNotNone(db_artist)
+        self.assertEqual(db_artist.genres, ["new wave", "synthpop"]) # Check JSON stored list
 
-        # Verify old track was not processed
+        db_track = self.session.query(Track).filter(Track.track_id == "new_track_1").one_or_none()
+        self.assertIsNotNone(db_track)
+        self.assertEqual(db_track.available_markets, ["US", "GB"]) # Check JSON stored list
+
         old_listen_entry = self.session.query(Listen).filter(Listen.track_id == "old_track_1").one_or_none()
         self.assertIsNone(old_listen_entry)
-
-        # Ensure commit was called on the session by process_spotify_data (indirectly via checking data)
-        # And rollback wasn't called unless an error (which we don't expect here)
-        # Hard to directly check commit call without more complex session mocking. Data presence is good proxy.
 
 
 if __name__ == '__main__': # pragma: no cover

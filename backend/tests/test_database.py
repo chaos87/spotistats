@@ -1,45 +1,52 @@
 import pytest
 from unittest.mock import patch, MagicMock
-from sqlalchemy import create_engine, JSON, Integer # Import JSON and Integer
+from sqlalchemy import create_engine, JSON, Integer, TEXT # Ensure TEXT is imported if not already
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.dialects.postgresql import ARRAY # Import ARRAY to reference original type
 
 # Import the functions and classes to be tested
 # Assuming tests are run from the 'backend' directory or PYTHONPATH is set appropriately
 from backend.src.database import (
     get_db_engine,
     insert_raw_data,
-    init_db, # Changed from create_tables
-    RecentlyPlayedTracksRaw,
-    Base
+    init_db,
+    Base # Base is needed for metadata
 )
+# Import models needed for type modification
+from backend.src.models import RecentlyPlayedTracksRaw, Artist, Track
 from backend.src.config import get_env_variable # For mocking
 
 # Use a fixed in-memory SQLite database for most tests for speed and isolation.
-# For functions that absolutely need PostgreSQL features (like JSONB),
-# those might need a separate integration test setup or more complex mocking.
 TEST_DATABASE_URL_SQLITE = "sqlite:///:memory:"
 
 @pytest.fixture(scope="function")
 def sqlite_engine():
-    """Creates an in-memory SQLite engine for testing and creates tables."""
+    """Creates an in-memory SQLite engine for testing, applying type workarounds for SQLite compatibility."""
     engine = create_engine(TEST_DATABASE_URL_SQLITE)
 
-    # Original types
-    original_data_type = RecentlyPlayedTracksRaw.data.property.columns[0].type
-    original_id_type = RecentlyPlayedTracksRaw.id.property.columns[0].type
+    # Store original types
+    original_artist_genres_type = Artist.genres.property.columns[0].type
+    original_track_markets_type = Track.available_markets.property.columns[0].type
+    original_raw_data_type = RecentlyPlayedTracksRaw.data.property.columns[0].type
+    # original_raw_id_type = RecentlyPlayedTracksRaw.id.property.columns[0].type # Not needed if ID is standard Integer
 
     # Temporarily change types for SQLite compatibility
-    RecentlyPlayedTracksRaw.data.property.columns[0].type = JSON()
-    RecentlyPlayedTracksRaw.id.property.columns[0].type = Integer()
+    # ARRAY(TEXT) and JSONB are not natively supported by SQLite's SQLAlchemy dialect
+    Artist.genres.property.columns[0].type = JSON()
+    Track.available_markets.property.columns[0].type = JSON()
+    RecentlyPlayedTracksRaw.data.property.columns[0].type = JSON() # JSONB to JSON
+    # RecentlyPlayedTracksRaw.id.property.columns[0].type = Integer() # Assuming ID is already Integer, no change needed
 
     Base.metadata.create_all(engine) # Create tables for this engine instance
     yield engine
     Base.metadata.drop_all(engine) # Clean up tables after test
 
     # Restore original types
-    RecentlyPlayedTracksRaw.data.property.columns[0].type = original_data_type
-    RecentlyPlayedTracksRaw.id.property.columns[0].type = original_id_type
+    Artist.genres.property.columns[0].type = original_artist_genres_type
+    Track.available_markets.property.columns[0].type = original_track_markets_type
+    RecentlyPlayedTracksRaw.data.property.columns[0].type = original_raw_data_type
+    # RecentlyPlayedTracksRaw.id.property.columns[0].type = original_raw_id_type # Not needed
 
 @pytest.fixture
 def mock_db_session(sqlite_engine):
@@ -90,42 +97,50 @@ def test_get_db_engine_connection_error(mock_create_engine, mock_get_env_var):
         get_db_engine()
 
 # --- Tests for init_db (formerly create_tables) ---
-def test_create_tables_via_init_db(sqlite_engine): # Renamed function
-    """Test that init_db runs without error and tables are created.""" # Updated docstring
-    # The fixture sqlite_engine already calls Base.metadata.create_all(engine)
-    # So we just check if the table exists using inspect
+def test_create_tables_via_init_db(sqlite_engine):
+    """Test that init_db runs without error and tables are created."""
     from sqlalchemy import inspect
     inspector = inspect(sqlite_engine)
+    # Check a few key tables
     assert RecentlyPlayedTracksRaw.__tablename__ in inspector.get_table_names()
+    assert Artist.__tablename__ in inspector.get_table_names()
+    assert Track.__tablename__ in inspector.get_table_names()
+
 
     # We can also try to run it again to ensure it's idempotent
     try:
-        init_db(sqlite_engine) # Changed to init_db
+        init_db(sqlite_engine)
     except Exception as e:
-        pytest.fail(f"init_db raised an exception {e} when run on existing tables.") # Updated fail message
+        pytest.fail(f"init_db raised an exception {e} when run on existing tables.")
 
 
 # --- Tests for insert_raw_data ---
+# This test primarily focuses on RecentlyPlayedTracksRaw which has its 'data' field type changed to JSON
 def test_insert_raw_data_success(sqlite_engine, mock_db_session):
-    """Test successful insertion of raw data."""
+    """Test successful insertion of raw data into RecentlyPlayedTracksRaw."""
     sample_data = {"key": "value", "items": [{"id": 1, "name": "Test Song"}]}
 
-    insert_raw_data(sqlite_engine, sample_data)
+    # insert_raw_data is specific to RecentlyPlayedTracksRaw, ensure it's used correctly
+    # If insert_raw_data was meant to be generic, its implementation would need to change
+    # Assuming insert_raw_data is for the specific table as per its current model import
+    engine_for_insert = sqlite_engine # The fixture engine already has tables created
+    insert_raw_data(engine_for_insert, sample_data)
 
-    # Verify data in the database using the session from the fixture
+
     record = mock_db_session.query(RecentlyPlayedTracksRaw).first()
     assert record is not None
-    assert record.data == sample_data # For SQLite JSON type, dict comparison should work
+    assert record.data == sample_data
     assert record.id is not None
     assert record.ingestion_timestamp is not None
 
 def test_insert_raw_data_multiple_records(sqlite_engine, mock_db_session):
-    """Test inserting multiple records successfully."""
+    """Test inserting multiple records into RecentlyPlayedTracksRaw successfully."""
     sample_data1 = {"event": "play", "track_id": "track1"}
     sample_data2 = {"event": "pause", "track_id": "track2"}
 
-    insert_raw_data(sqlite_engine, sample_data1)
-    insert_raw_data(sqlite_engine, sample_data2)
+    engine_for_insert = sqlite_engine
+    insert_raw_data(engine_for_insert, sample_data1)
+    insert_raw_data(engine_for_insert, sample_data2)
 
     records = mock_db_session.query(RecentlyPlayedTracksRaw).order_by(RecentlyPlayedTracksRaw.id).all()
     assert len(records) == 2
@@ -142,11 +157,9 @@ def test_insert_raw_data_commit_error(mock_sessionmaker, sqlite_engine):
     """Test insert_raw_data handles SQLAlchemyError during commit and rolls back."""
     mock_session_instance = MagicMock()
     mock_session_instance.commit.side_effect = SQLAlchemyError("Commit failed")
-    mock_session_instance.rollback = MagicMock() # Ensure rollback is mockable
-    mock_session_instance.close = MagicMock() # Ensure close is mockable
+    mock_session_instance.rollback = MagicMock()
+    mock_session_instance.close = MagicMock()
 
-    # Configure the mock sessionmaker to return our mock_session_instance
-    # sessionmaker() returns a class, then call it to get session_instance
     mock_session_factory = MagicMock(return_value=mock_session_instance)
     mock_sessionmaker.return_value = mock_session_factory
 
@@ -157,7 +170,7 @@ def test_insert_raw_data_commit_error(mock_sessionmaker, sqlite_engine):
 
     mock_session_instance.add.assert_called_once()
     mock_session_instance.commit.assert_called_once()
-    mock_session_instance.rollback.assert_called_once() # Crucial check
+    mock_session_instance.rollback.assert_called_once()
     mock_session_instance.close.assert_called_once()
 
 
@@ -165,8 +178,6 @@ def test_insert_raw_data_commit_error(mock_sessionmaker, sqlite_engine):
 def test_recently_played_tracks_raw_repr():
     """Test the __repr__ method of the model."""
     record = RecentlyPlayedTracksRaw(id=1, data={"test": "data"}, ingestion_timestamp="2023-01-01T12:00:00Z")
-    # Note: ingestion_timestamp would normally be a datetime object if queried from DB
-    # For direct instantiation, the string is fine for repr testing.
     expected_repr = "<RecentlyPlayedTracksRaw(id=1, ingestion_timestamp='2023-01-01T12:00:00Z')>"
     assert repr(record) == expected_repr
 
