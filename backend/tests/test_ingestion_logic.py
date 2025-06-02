@@ -1,22 +1,23 @@
 import unittest
 import datetime
 import logging
-from unittest.mock import patch, MagicMock, call
+from unittest.mock import patch, MagicMock, call # Ensure 'call' is imported
+import pytest # For pytest.fail if needed in side_effect
+
 from sqlalchemy import create_engine, text, JSON, TEXT
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 
 from backend.src.models import Base, Artist, Album, Track, Listen, RecentlyPlayedTracksRaw
 # Import for mocking normalizer
-from backend.src.normalizer import SpotifyMusicNormalizer as RealNormalizer # Keep real one for type hints if needed
+from backend.src.normalizer import SpotifyMusicNormalizer as RealNormalizer
 
 from backend.src.database import (
-    get_max_played_at as real_get_max_played_at, # Keep real one for direct tests
+    get_max_played_at as real_get_max_played_at,
     upsert_artist, upsert_album, upsert_track,
-    insert_listen as real_insert_listen, # Keep real one for direct tests
+    insert_listen as real_insert_listen,
     init_db
 )
-# Functions/classes to be mocked from main.py are referenced via 'backend.main.X' in patches
 from backend.main import process_spotify_data
 
 logging.basicConfig(level=logging.DEBUG)
@@ -25,7 +26,6 @@ logger = logging.getLogger(__name__)
 TEST_SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
 
 def make_dt(dt_str: str) -> datetime.datetime:
-    """Helper to create timezone-aware datetime objects from ISO strings."""
     return datetime.datetime.fromisoformat(dt_str.replace('Z', '+00:00'))
 
 class TestIngestionLogic(unittest.TestCase):
@@ -158,24 +158,31 @@ class TestIngestionLogic(unittest.TestCase):
         max_played_at_val = datetime.datetime(2023, 1, 10, 0, 0, 0, tzinfo=datetime.timezone.utc)
         mock_get_max_played_at.return_value = max_played_at_val
 
-        # Define track IDs for easier reference
-        good_track_id_1 = "good_track_id_1"
-        good_track_id_2 = "good_track_id_2"
-        norm_fail_track_id = "norm_fail_track_id"
+        # Define unique track IDs
+        item_good_1_track_id = "test_track_good_1_flow_logic"
+        item_good_2_track_id = "test_track_good_2_flow_logic"
+        item_normalize_fail_track_id = "test_track_norm_fail_flow_logic"
 
-        # Spotify typically returns newest first. process_spotify_data reverses this.
-        item_normalize_fail = {"track": {"id": norm_fail_track_id, "type": "track", "name":"NormFail"}, "played_at": (max_played_at_val + datetime.timedelta(hours=4)).isoformat().replace('+00:00', 'Z')}
+        # Pre-define mock ORM objects that normalizer will return
+        artist_mock_1 = MagicMock(spec=Artist, name="Artist1_FlowLogic")
+        album_mock_1 = MagicMock(spec=Album, name="Album1_FlowLogic")
+        track_mock_1 = MagicMock(spec=Track, name="Track1_FlowLogic", id=item_good_1_track_id) # Ensure ID matches
+        listen_obj_for_good_item_1 = MagicMock(spec=Listen, name="ListenForGoodItem1_FlowLogic")
+
+        artist_mock_2 = MagicMock(spec=Artist, name="Artist2_FlowLogic")
+        album_mock_2 = MagicMock(spec=Album, name="Album2_FlowLogic")
+        track_mock_2 = MagicMock(spec=Track, name="Track2_FlowLogic", id=item_good_2_track_id) # Ensure ID matches
+        listen_obj_for_good_item_2 = MagicMock(spec=Listen, name="ListenForGoodItem2_FlowLogic")
+
+        # Mock Spotify items using these unique track IDs
+        item_normalize_fail = {"track": {"id": item_normalize_fail_track_id, "type": "track", "name":"NormFail"}, "played_at": (max_played_at_val + datetime.timedelta(hours=4)).isoformat().replace('+00:00', 'Z')}
         item_episode = {"track": {"id": "ep1", "type": "episode", "name":"Podcast"}, "played_at": (max_played_at_val + datetime.timedelta(hours=3)).isoformat().replace('+00:00', 'Z')}
-        item_good_2 = {"track": {"id": good_track_id_2, "type": "track", "name":"Good2"}, "played_at": (max_played_at_val + datetime.timedelta(hours=2)).isoformat().replace('+00:00', 'Z')}
-        item_good_1 = {"track": {"id": good_track_id_1, "type": "track", "name":"Good1"}, "played_at": (max_played_at_val + datetime.timedelta(hours=1)).isoformat().replace('+00:00', 'Z')}
+        item_good_2 = {"track": {"id": item_good_2_track_id, "type": "track", "name":"Good2"}, "played_at": (max_played_at_val + datetime.timedelta(hours=2)).isoformat().replace('+00:00', 'Z')}
+        item_good_1 = {"track": {"id": item_good_1_track_id, "type": "track", "name":"Good1"}, "played_at": (max_played_at_val + datetime.timedelta(hours=1)).isoformat().replace('+00:00', 'Z')}
         item_old = {"track": {"id": "old_track", "type": "track", "name":"Oldie"}, "played_at": (max_played_at_val - datetime.timedelta(days=1)).isoformat().replace('+00:00', 'Z')}
 
         spotify_api_items_list = [item_normalize_fail, item_episode, item_good_2, item_good_1, item_old]
         mock_get_played_tracks.return_value = {"items": spotify_api_items_list}
-
-        # Pre-define mock Listen objects
-        mock_listen_obj_good_1 = MagicMock(spec=Listen, name="MockListenGood1")
-        mock_listen_obj_good_2 = MagicMock(spec=Listen, name="MockListenGood2")
 
         mock_normalizer_instance = MagicMock(spec=RealNormalizer)
         def custom_normalize_side_effect(spotify_item, played_at_dt):
@@ -184,13 +191,16 @@ class TestIngestionLogic(unittest.TestCase):
                 logger.error("Normalizer mock received naive datetime!")
                 played_at_dt = played_at_dt.replace(tzinfo=datetime.timezone.utc)
 
-            if track_id == good_track_id_1:
-                return (MagicMock(spec=Artist), MagicMock(spec=Album), MagicMock(spec=Track, id=good_track_id_1), mock_listen_obj_good_1)
-            elif track_id == good_track_id_2:
-                return (MagicMock(spec=Artist), MagicMock(spec=Album), MagicMock(spec=Track, id=good_track_id_2), mock_listen_obj_good_2)
-            elif track_id == norm_fail_track_id:
+            if track_id == item_good_1_track_id:
+                return (artist_mock_1, album_mock_1, track_mock_1, listen_obj_for_good_item_1)
+            elif track_id == item_good_2_track_id:
+                return (artist_mock_2, album_mock_2, track_mock_2, listen_obj_for_good_item_2)
+            elif track_id == item_normalize_fail_track_id:
                 return None
-            return (MagicMock(spec=Artist), MagicMock(spec=Album), MagicMock(spec=Track), MagicMock(spec=Listen)) # Default for others not expected to be inserted
+            # Fallback for other items like 'old_track' or 'ep1' if they somehow reach normalizer
+            # and were not filtered out by earlier checks in process_spotify_data
+            logger.warning(f"custom_normalize_side_effect called with unexpected track_id: {track_id}")
+            return (MagicMock(spec=Artist), MagicMock(spec=Album), MagicMock(spec=Track), MagicMock(spec=Listen))
 
         mock_normalizer_instance.normalize_track_item.side_effect = custom_normalize_side_effect
         mock_normalizer_class.return_value = mock_normalizer_instance
@@ -199,7 +209,7 @@ class TestIngestionLogic(unittest.TestCase):
         mock_upsert_album.return_value = {"album_id": "mock_album_id"}
         mock_upsert_track.return_value = {"track_id": "mock_track_id"}
 
-        mock_insert_listen.return_value = MagicMock(spec=Listen) # Simulate successful insert
+        mock_insert_listen.return_value = MagicMock(spec=Listen)
 
         process_spotify_data()
 
@@ -208,9 +218,6 @@ class TestIngestionLogic(unittest.TestCase):
 
         self.assertEqual(mock_insert_listen.call_count, 2)
 
-        # Items are processed in reversed order of spotify_api_items_list by process_spotify_data
-        # So, item_old -> item_good_1 -> item_good_2 -> item_episode -> item_normalize_fail
-        # Normalizer is called for tracks newer than max_played_at_val: item_good_1, item_good_2, item_normalize_fail
         calls_to_normalizer = [
             call(item_good_1, make_dt(item_good_1['played_at'])),
             call(item_good_2, make_dt(item_good_2['played_at'])),
@@ -220,8 +227,8 @@ class TestIngestionLogic(unittest.TestCase):
         self.assertEqual(mock_normalizer_instance.normalize_track_item.call_count, 3)
 
         expected_insert_listen_calls = [
-            call(self.session, mock_listen_obj_good_1), # Processed first from the 'new' items
-            call(self.session, mock_listen_obj_good_2)
+            call(self.session, listen_obj_for_good_item_1),
+            call(self.session, listen_obj_for_good_item_2)
         ]
         mock_insert_listen.assert_has_calls(expected_insert_listen_calls, any_order=False)
 

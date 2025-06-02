@@ -21,26 +21,32 @@ def disable_logging_for_tests():
 def setup_happy_path_mocks(
     mock_get_db_engine, mock_get_spotify_credentials, mock_spotify_oauth_client,
     mock_get_session, mock_get_max_played_at, mock_get_recently_played,
-    # Optional specific return values
     max_played_at_return=None,
     recently_played_return={"items": []},
-    access_token="mock_access_token" # Allow customizing access token if needed
+    access_token="mock_access_token"
     ):
 
-    mock_get_spotify_credentials.return_value = ("test_client_id", "test_client_secret", "test_refresh_token")
-    mock_oauth_instance = mock_spotify_oauth_client.return_value
-    mock_oauth_instance.get_access_token_from_refresh.return_value = access_token
+    if mock_get_spotify_credentials: # Allow skipping if already handled by test-specific side_effect
+        mock_get_spotify_credentials.return_value = ("test_client_id", "test_client_secret", "test_refresh_token")
 
-    mock_db_engine_instance = MagicMock()
-    mock_get_db_engine.return_value = mock_db_engine_instance
+    if mock_spotify_oauth_client: # Allow skipping
+        mock_oauth_instance = mock_spotify_oauth_client.return_value
+        mock_oauth_instance.get_access_token_from_refresh.return_value = access_token
 
-    mock_session_instance = MagicMock()
-    # Ensure session instance has a name if logging uses it e.g. repr(session)
-    mock_session_instance.name = "mock_session_instance"
-    mock_get_session.return_value = mock_session_instance
+    if mock_get_db_engine: # Allow skipping
+        mock_db_engine_instance = MagicMock()
+        mock_get_db_engine.return_value = mock_db_engine_instance
 
-    mock_get_max_played_at.return_value = max_played_at_return
-    mock_get_recently_played.return_value = recently_played_return
+    if mock_get_session: # Allow skipping
+        mock_session_instance = MagicMock()
+        mock_session_instance.name = "mock_session_instance"
+        mock_get_session.return_value = mock_session_instance
+
+    if mock_get_max_played_at: # Allow skipping
+        mock_get_max_played_at.return_value = max_played_at_return
+
+    if mock_get_recently_played: # Allow skipping
+        mock_get_recently_played.return_value = recently_played_return
 
 
 @patch('backend.main.SpotifyMusicNormalizer')
@@ -55,22 +61,11 @@ def setup_happy_path_mocks(
 @patch('backend.main.get_spotify_credentials')
 @patch('backend.main.get_db_engine')
 def test_main_successful_run(
-    mock_get_db_engine,  # Innermost decorator
-    mock_get_spotify_credentials,
-    mock_spotify_oauth_client,
-    mock_get_recently_played,
-    mock_insert_listen,
-    mock_upsert_track,
-    mock_upsert_album,
-    mock_upsert_artist,
-    mock_get_max_played_at,
-    mock_get_session,
-    mock_normalizer_class # Outermost decorator
+    mock_get_db_engine, mock_get_spotify_credentials, mock_spotify_oauth_client,
+    mock_get_recently_played, mock_insert_listen, mock_upsert_track, mock_upsert_album,
+    mock_upsert_artist, mock_get_max_played_at, mock_get_session, mock_normalizer_class
 ):
-    # Arrange
-    now_dt = datetime.datetime.now(datetime.timezone.utc)
-    # Ensure microseconds are zeroed out if fromisoformat in main.py might lose them or compare differently
-    now_dt = now_dt.replace(microsecond=0)
+    now_dt = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0)
     now_iso = now_dt.isoformat().replace('+00:00', 'Z')
 
     spotify_item_good = {
@@ -118,10 +113,8 @@ def test_main_successful_run(
     mock_get_recently_played.assert_called_once_with("mock_access_token", limit=50, after=expected_after_param)
 
     mock_normalizer_class.assert_called_once()
-    # Compare datetime objects directly for precision
     parsed_played_at_dt = datetime.datetime.fromisoformat(now_iso.replace('Z', '+00:00'))
     mock_normalizer_instance.normalize_track_item.assert_called_once_with(spotify_item_good, parsed_played_at_dt)
-
 
     mock_upsert_artist.assert_called_once()
     mock_upsert_album.assert_called_once()
@@ -140,7 +133,7 @@ def test_main_handles_config_value_error(mock_get_credentials_fails):
 
     try:
         main_module.process_spotify_data()
-    except Exception as e: # Should not raise unhandled
+    except Exception as e:
         pytest.fail(f"process_spotify_data() raised an unhandled exception on config error: {e}")
     mock_get_credentials_fails.assert_called_once()
 
@@ -148,39 +141,49 @@ def test_main_handles_config_value_error(mock_get_credentials_fails):
 @patch('backend.main.get_spotify_credentials')
 @patch('backend.main.SpotifyOAuthClient')
 def test_main_handles_spotify_auth_error(
-    mock_spotify_oauth_client, # Innermost
+    mock_spotify_oauth_client,
     mock_get_credentials
 ):
+    # Setup for this specific error
     mock_get_credentials.return_value = ("test_id", "test_secret", "test_refresh")
     mock_oauth_instance = mock_spotify_oauth_client.return_value
     mock_oauth_instance.get_access_token_from_refresh.side_effect = SpotifyAuthError("Simulated Auth Error")
 
-    import importlib
-    from backend import main as main_module
-    importlib.reload(main_module)
-    try:
-        main_module.process_spotify_data()
-    except Exception as e:
-        pytest.fail(f"process_spotify_data() raised an unhandled exception on SpotifyAuthError: {e}")
+    # Mocks for functions that might be called in finally block if session was opened
+    with patch('backend.main.get_db_engine', return_value=MagicMock()) as mock_db_engine, \
+         patch('backend.main.get_session', return_value=MagicMock()) as mock_session:
 
-    mock_get_credentials.assert_called_once()
-    mock_spotify_oauth_client.assert_called_once()
-    mock_oauth_instance.get_access_token_from_refresh.assert_called_once()
+        import importlib
+        from backend import main as main_module
+        importlib.reload(main_module)
+        try:
+            main_module.process_spotify_data()
+        except Exception as e:
+            pytest.fail(f"process_spotify_data() raised an unhandled exception on SpotifyAuthError: {e}")
+
+        mock_get_credentials.assert_called_once()
+        mock_spotify_oauth_client.assert_called_once()
+        mock_oauth_instance.get_access_token_from_refresh.assert_called_once()
+        # Check if session was potentially opened and closed if error happens after session init
+        # In this case, error is before session init, so these might not be called.
+        # Adjust if process_spotify_data structure changes regarding session opening.
+        if mock_session.called: # Only assert close if session was obtained
+             mock_session.return_value.close.assert_called_once()
 
 
 @patch('backend.main.get_db_engine')
 @patch('backend.main.get_session')
-@patch('backend.main.get_spotify_credentials') # Added mock_get_spotify_credentials to signature
+@patch('backend.main.get_spotify_credentials')
 @patch('backend.main.SpotifyOAuthClient')
 @patch('backend.main.get_recently_played_tracks', side_effect=SpotifyAPIError("Simulated API Error"))
 def test_main_handles_spotify_api_error(
-    mock_get_recently_played, # Innermost
+    mock_get_recently_played,
     mock_spotify_oauth_client,
-    mock_get_spotify_credentials, # Added: maps to the 3rd @patch from bottom
+    mock_get_spotify_credentials, # Corrected: Added argument
     mock_get_session,
     mock_get_db_engine
 ):
-    # Setup mocks for calls that happen before get_recently_played_tracks
+    # Setup for this specific error
     mock_get_spotify_credentials.return_value = ("test_id", "test_client_secret", "test_refresh_token")
     mock_oauth_instance = mock_spotify_oauth_client.return_value
     mock_oauth_instance.get_access_token_from_refresh.return_value = "mock_access_token"
@@ -189,18 +192,18 @@ def test_main_handles_spotify_api_error(
     mock_get_db_engine.return_value = mock_db_engine_instance
     mock_session_instance = MagicMock()
     mock_get_session.return_value = mock_session_instance
-    # No need to mock get_max_played_at if error is before it or if its absence is handled
 
-    import importlib
-    from backend import main as main_module
-    importlib.reload(main_module)
-    try:
-        main_module.process_spotify_data()
-    except Exception as e:
-        pytest.fail(f"process_spotify_data() raised an unhandled exception on SpotifyAPIError: {e}")
+    # get_max_played_at would be called before get_recently_played_tracks
+    with patch('backend.main.get_max_played_at', return_value=None):
+        import importlib
+        from backend import main as main_module
+        importlib.reload(main_module)
+        try:
+            main_module.process_spotify_data()
+        except Exception as e:
+            pytest.fail(f"process_spotify_data() raised an unhandled exception on SpotifyAPIError: {e}")
 
     mock_get_recently_played.assert_called_once()
-    # Assertions for finally block
     mock_get_session.return_value.rollback.assert_called_once()
     mock_get_session.return_value.close.assert_called_once()
 
@@ -230,17 +233,10 @@ def test_main_handles_db_engine_error(mock_get_db_engine_fails):
 @patch('backend.main.get_spotify_credentials')
 @patch('backend.main.get_db_engine')
 def test_main_handles_db_insert_error(
-    mock_get_db_engine,
-    mock_get_spotify_credentials,
-    mock_spotify_oauth_client,
-    mock_get_recently_played,
-    mock_insert_listen_fails,
-    mock_upsert_track,
-    mock_upsert_album,
-    mock_upsert_artist,
-    mock_get_max_played_at,
-    mock_get_session,
-    mock_normalizer_class
+    mock_get_db_engine, mock_get_spotify_credentials, mock_spotify_oauth_client,
+    mock_get_recently_played, mock_insert_listen_fails, mock_upsert_track,
+    mock_upsert_album, mock_upsert_artist, mock_get_max_played_at,
+    mock_get_session, mock_normalizer_class
 ):
     now_dt = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0)
     now_iso = now_dt.isoformat().replace('+00:00', 'Z')
@@ -264,7 +260,7 @@ def test_main_handles_db_insert_error(
     mock_upsert_album.return_value = {"album_id": "some_id"}
     mock_upsert_track.return_value = {"track_id": "some_id"}
 
-    mock_insert_listen_fails.side_effect = Exception("Simulated DB Insert Error")
+    # insert_listen is the one that fails (already patched with side_effect)
 
     import importlib
     from backend import main as main_module
@@ -287,12 +283,8 @@ def test_main_handles_db_insert_error(
 @patch('backend.main.get_spotify_credentials')
 @patch('backend.main.get_db_engine')
 def test_main_no_items_fetched(
-    mock_get_db_engine,
-    mock_get_spotify_credentials,
-    mock_spotify_oauth_client,
-    mock_get_recently_played,
-    mock_insert_listen,
-    mock_get_max_played_at,
+    mock_get_db_engine, mock_get_spotify_credentials, mock_spotify_oauth_client,
+    mock_get_recently_played, mock_insert_listen, mock_get_max_played_at,
     mock_get_session
 ):
     setup_happy_path_mocks(
