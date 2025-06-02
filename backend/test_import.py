@@ -4,18 +4,18 @@ import logging
 
 print(f"Initial sys.path: {sys.path}")
 
-# Attempt to import python_json_logger BEFORE sys.path modification
+# Attempt to import pythonjsonlogger BEFORE sys.path modification
 try:
-    from python_json_logger import jsonlogger
-    print("Successfully imported python_json_logger.jsonlogger (BEFORE sys.path mod)")
+    import pythonjsonlogger # Changed import
+    print("Successfully imported pythonjsonlogger (BEFORE sys.path mod)")
 except ModuleNotFoundError as e:
-    print(f"Failed to import python_json_logger.jsonlogger (BEFORE sys.path mod): {e}")
+    print(f"Failed to import pythonjsonlogger (BEFORE sys.path mod): {e}") # Changed message
     # This would be very telling if it fails here too
     # To ensure script halts if this critical test fails
-    if 'python_json_logger' not in sys.modules:
+    if 'pythonjsonlogger' not in sys.modules: # Changed module name check
         raise
     else:
-        print("python_json_logger was in sys.modules despite ModuleNotFoundError? This is odd.")
+        print("pythonjsonlogger was in sys.modules despite ModuleNotFoundError? This is odd.") # Changed message
 
 
 # Now, simulate PYTHONPATH=/app by adding the parent directory of 'backend/' to sys.path
@@ -28,15 +28,15 @@ print(f"sys.path for further import attempts: {sys.path}")
 
 # Try importing again, just to see (should already be in sys.modules if first import worked)
 try:
-    from python_json_logger import jsonlogger # This should use the already imported module
-    print("Successfully imported python_json_logger.jsonlogger (AFTER sys.path mod)")
+    import pythonjsonlogger # Changed import; This should use the already imported module
+    print("Successfully imported pythonjsonlogger (AFTER sys.path mod)") # Changed message
 except ModuleNotFoundError as e:
-    print(f"Failed to import python_json_logger.jsonlogger (AFTER sys.path mod): {e}")
+    print(f"Failed to import pythonjsonlogger (AFTER sys.path mod): {e}") # Changed message
     # If it succeeded before but fails now, this is the key
-    if 'python_json_logger' not in sys.modules: # Check if it truly disappeared
+    if 'pythonjsonlogger' not in sys.modules: # Changed module name check; Check if it truly disappeared
         raise
     else:
-        print("python_json_logger was in sys.modules, but ModuleNotFoundError on re-import? Very odd.")
+        print("pythonjsonlogger was in sys.modules, but ModuleNotFoundError on re-import? Very odd.") # Changed message
 
 
 # Then try the logging_config import
