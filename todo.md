@@ -142,16 +142,16 @@ This checklist is based on the project specification, broken down into iterative
 
 ### Module 2.5: Advanced Ingestion Features & Robustness
 
--   [ ] **Implement `tracks.last_played_at` Update Logic (`backend/src/database.py` and `normalizer.py`)**
-    -   [ ] Modify `upsert_track` in `database.py` to update `last_played_at` if the new `played_at` is more recent.
-    -   [ ] Ensure `normalizer.py` sets `last_played_at` on `Track` objects during normalization.
-    -   [ ] Update `backend/tests/test_ingestion_logic.py` with test cases for `last_played_at` updates.
--   [ ] **Implement Comprehensive Error Handling & Structured Logging (`backend/src/utils.py`, `main.py`, client/data/db files)**
-    -   [ ] Create `backend/src/utils.py` with retry logic (e.g., decorator).
-    -   [ ] Configure structured JSON logging in `main.py`.
-    -   [ ] Apply `try-except` blocks around all critical operations in `main.py`.
-    -   [ ] Define and raise custom exceptions (e.g., `SpotifyAPIError`, `DatabaseError`) in `spotify_client.py`, `spotify_data.py`, `database.py`.
-    -   [ ] Update tests to verify error handling and logging.
+-   [x] **Implement `tracks.last_played_at` Update Logic (`backend/src/database.py` and `normalizer.py`)**
+    -   [x] Modify `upsert_track` in `database.py` to update `last_played_at` if the new `played_at` is more recent.
+    -   [x] Ensure `normalizer.py` sets `last_played_at` on `Track` objects during normalization.
+    -   [x] Update `backend/tests/test_ingestion_logic.py` with test cases for `last_played_at` updates.
+-   [x] **Implement Comprehensive Error Handling & Structured Logging (`backend/src/utils.py`, `main.py`, client/data/db files)**
+    -   [x] Create `backend/src/utils.py` with retry logic (e.g., decorator).
+    -   [x] Configure structured JSON logging in `main.py`.
+    -   [x] Apply `try-except` blocks around all critical operations in `main.py`.
+    -   [x] Define and raise custom exceptions (e.g., `SpotifyAPIError`, `DatabaseError`) in `spotify_client.py`, `spotify_data.py`, `database.py`.
+    -   [x] Update tests to verify error handling and logging.
 
 ### Module 2.6: Deployment & Scheduling
 
