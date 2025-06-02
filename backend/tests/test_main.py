@@ -1,6 +1,7 @@
 import pytest
 from unittest.mock import patch, MagicMock
 import logging
+import datetime # Added this line
 
 # Import errors that main.py specifically catches
 from backend.src.spotify_client import SpotifyAuthError
@@ -168,8 +169,8 @@ def test_main_handles_spotify_auth_error(
 @patch('backend.main.get_db_engine') # For get_session call
 @patch('backend.main.get_session')   # To provide a session for finally block
 def test_main_handles_spotify_api_error(
-    mock_get_session, # Added
-    mock_get_db_engine, # Added
+    mock_get_session,
+    mock_get_db_engine,
     mock_get_recently_played,
     mock_spotify_oauth_client,
     mock_get_credentials
@@ -179,7 +180,6 @@ def test_main_handles_spotify_api_error(
     mock_oauth_instance = mock_spotify_oauth_client.return_value
     mock_oauth_instance.get_access_token_from_refresh.return_value = "mock_access_token"
 
-    # Mock get_db_engine and get_session for the try/finally block
     mock_db_engine_instance = MagicMock()
     mock_get_db_engine.return_value = mock_db_engine_instance
     mock_session_instance = MagicMock()
@@ -195,7 +195,7 @@ def test_main_handles_spotify_api_error(
         pytest.fail(f"process_spotify_data() raised an unhandled exception on SpotifyAPIError: {e}")
 
     mock_get_recently_played.assert_called_once()
-    mock_session_instance.rollback.assert_called_once() # Should rollback on error
+    mock_session_instance.rollback.assert_called_once()
     mock_session_instance.close.assert_called_once()
 
 
@@ -204,7 +204,6 @@ def test_main_handles_db_engine_error(
     mock_get_db_engine
 ):
     """Test process_spotify_data() handles errors during DB engine init (via get_session)."""
-    # Credentials and Spotify client mocks are not strictly needed if error is at get_db_engine
     import importlib
     from backend import main as main_module
     importlib.reload(main_module)
@@ -213,23 +212,19 @@ def test_main_handles_db_engine_error(
     except Exception as e:
         pytest.fail(f"process_spotify_data() raised an unhandled exception on DB engine error: {e}")
 
-    # process_spotify_data calls get_db_engine via get_session.
-    # If get_db_engine itself is patched to error, this should be hit.
     mock_get_db_engine.assert_called_once()
 
-# This test needs significant rework as process_spotify_data has more complex DB interaction
-# For instance, it calls multiple db functions (get_max_played_at, upserts, insert_listen)
-# Patching just one (like insert_listen) might not fully test error handling for all DB errors.
+
 @patch('backend.main.get_spotify_credentials')
 @patch('backend.main.SpotifyOAuthClient')
 @patch('backend.main.get_recently_played_tracks')
 @patch('backend.main.get_db_engine')
 @patch('backend.main.get_session')
-@patch('backend.main.get_max_played_at') # Add this
-@patch('backend.main.insert_listen', side_effect=Exception("Test DB Insert Error")) # Example: error on insert_listen
+@patch('backend.main.get_max_played_at')
+@patch('backend.main.insert_listen', side_effect=Exception("Test DB Insert Error"))
 def test_main_handles_db_insert_error(
     mock_insert_listen_fails,
-    mock_get_max_played_at, # Add this
+    mock_get_max_played_at,
     mock_get_session,
     mock_get_db_engine,
     mock_get_recently_played,
@@ -246,20 +241,17 @@ def test_main_handles_db_insert_error(
     mock_session_instance = MagicMock()
     mock_get_session.return_value = mock_session_instance
 
-    mock_get_max_played_at.return_value = None # Simulate no previous listens
+    mock_get_max_played_at.return_value = None
 
     now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat().replace('+00:00', 'Z')
-    mock_spotify_data = {"items": [{"track": {"id":"trk1", "type":"track", "name":"Test"}, "played_at": now_iso}]} # Simplified
+    mock_spotify_data = {"items": [{"track": {"id":"trk1", "type":"track", "name":"Test"}, "played_at": now_iso}]}
     mock_get_recently_played.return_value = mock_spotify_data
 
-    # Mock normalizer to return something, so flow reaches insert_listen
     with patch('backend.main.SpotifyMusicNormalizer') as mock_normalizer_class:
         mock_norm_instance = MagicMock()
-        # Simulate successful normalization returning mock model instances
         mock_norm_instance.normalize_track_item.return_value = (MagicMock(), MagicMock(), MagicMock(), MagicMock())
         mock_normalizer_class.return_value = mock_norm_instance
 
-        # Mock upserts to not fail before insert_listen
         with patch('backend.main.upsert_artist', return_value=MagicMock()), \
              patch('backend.main.upsert_album', return_value=MagicMock()), \
              patch('backend.main.upsert_track', return_value=MagicMock()):
@@ -280,15 +272,15 @@ def test_main_handles_db_insert_error(
 @patch('backend.main.get_spotify_credentials')
 @patch('backend.main.SpotifyOAuthClient')
 @patch('backend.main.get_recently_played_tracks')
-@patch('backend.main.get_db_engine') # For get_session call
-@patch('backend.main.get_session')   # To provide a session for finally block
-@patch('backend.main.insert_listen') # To check it's not called
+@patch('backend.main.get_db_engine')
+@patch('backend.main.get_session')
+@patch('backend.main.insert_listen')
 @patch('backend.main.get_max_played_at')
 def test_main_no_items_fetched(
-    mock_get_max_played_at, # Added
-    mock_insert_listen, # Added
-    mock_get_session, # Added
-    mock_get_db_engine, # Added
+    mock_get_max_played_at,
+    mock_insert_listen,
+    mock_get_session,
+    mock_get_db_engine,
     mock_get_recently_played,
     mock_spotify_oauth_client,
     mock_get_credentials
@@ -300,24 +292,20 @@ def test_main_no_items_fetched(
 
     mock_db_engine_instance = MagicMock()
     mock_get_db_engine.return_value = mock_db_engine_instance
-    mock_session_instance = MagicMock() # Mock session for the finally block
+    mock_session_instance = MagicMock()
     mock_get_session.return_value = mock_session_instance
 
-    mock_get_max_played_at.return_value = None # No previous history
+    mock_get_max_played_at.return_value = None
 
-    mock_get_recently_played.return_value = {"items": []} # Simulate Spotify returning no items
+    mock_get_recently_played.return_value = {"items": []}
 
     import importlib
-    import datetime # Required for isoformat if not already imported at top
-    from backend import main as main_module
+    from backend import main as main_module # datetime is already imported at the top
     importlib.reload(main_module)
 
     main_module.process_spotify_data()
 
     mock_get_recently_played.assert_called_once_with("mock_access_token", limit=50, after=None)
     mock_insert_listen.assert_not_called()
-    # Should not commit if no items processed, but will call close
     mock_session_instance.commit.assert_not_called()
     mock_session_instance.close.assert_called_once()
-
-[Error creating import for 'datetime': cannot import name 'datetime' from 'backend.main']
