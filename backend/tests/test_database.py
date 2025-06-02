@@ -7,6 +7,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.dialects.postgresql import ARRAY
 
+from backend.src.exceptions import DatabaseError # Added import
 from backend.src.database import (
     get_db_engine,
     insert_raw_data,
@@ -53,24 +54,30 @@ def test_get_db_engine_success(mock_create_engine, mock_os_getenv):
     engine = get_db_engine()
 
     mock_os_getenv.assert_any_call("DATABASE_URL")
-    mock_os_getenv.assert_any_call("SQLALCHEMY_ECHO", "False")
+    # mock_os_getenv.assert_any_call("SQLALCHEMY_ECHO", "False") # This call happens inside create_engine, not directly in get_db_engine before config call
     mock_create_engine.assert_called_once_with(mock_db_url, echo=False)
     assert engine == mock_engine_instance
 
-@patch('os.getenv')
+@patch('os.getenv') # This will mock os.getenv calls within config.py as well
 def test_get_db_engine_missing_url(mock_os_getenv):
-    mock_os_getenv.side_effect = [None, "False"]
-    with patch('backend.src.database.create_engine') as mock_create_engine_fallback:
-        mock_engine_instance_fallback = MagicMock()
-        mock_create_engine_fallback.return_value = mock_engine_instance_fallback
+    # Simulate DATABASE_URL being None, and SQLALCHEMY_ECHO being "False"
+    mock_os_getenv.side_effect = lambda key, default=None: {
+        "DATABASE_URL": None,
+        "SQLALCHEMY_ECHO": "False" # This will be used by the create_engine call if it gets that far
+    }.get(key, default)
 
-        engine = get_db_engine()
+    # The function get_db_engine should raise DatabaseError wrapping ConfigurationError
+    # The error message from ConfigurationError is "Missing critical environment variable: DATABASE_URL"
+    # The DatabaseError message is "Unexpected error creating DB engine: Missing critical environment variable: DATABASE_URL"
+    expected_error_msg = "Unexpected error creating DB engine: Missing critical environment variable: DATABASE_URL"
+    with pytest.raises(DatabaseError, match=expected_error_msg): # Updated from backend.src.exceptions import DatabaseError
+        get_db_engine()
 
-        mock_os_getenv.assert_any_call("DATABASE_URL")
-        expected_fallback_url = "sqlite:///./local_spotify_dashboard.db"
-        mock_create_engine_fallback.assert_called_once_with(expected_fallback_url, echo=False)
-        # mock_engine_instance_fallback.connect.assert_called_once() # Removed this line
-        assert engine == mock_engine_instance_fallback
+    # Verify that os.getenv("DATABASE_URL") was indeed called (by get_database_url_config)
+    # This is a bit indirect; better to mock get_database_url_config if testing get_db_engine in isolation from config's internals
+    # For now, this setup implies testing the integration between get_db_engine and get_database_url_config
+    assert any(call_args[0][0] == "DATABASE_URL" for call_args in mock_os_getenv.call_args_list)
+
 
 # TODO: This test needs redesigning to test connection errors at a more appropriate stage (e.g., during session usage),
 # as get_db_engine itself does not establish a connection.
@@ -133,7 +140,8 @@ def test_insert_raw_data_commit_error(mock_sessionmaker_dont_use, sqlite_engine)
     mock_session_instance.add.side_effect = SQLAlchemyError("Add failed")
 
     sample_data = {"key": "value"}
-    with pytest.raises(SQLAlchemyError, match="Add failed"):
+    # insert_raw_data now wraps SQLAlchemyError in DatabaseError
+    with pytest.raises(DatabaseError, match="Failed to insert raw data: Add failed"): # Updated from backend.src.exceptions import DatabaseError
         insert_raw_data(mock_session_instance, sample_data)
 
     mock_session_instance.add.assert_called_once()

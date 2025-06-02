@@ -1,6 +1,7 @@
 import logging
 import os
-from python_json_logger import jsonlogger
+# Corrected import path for JsonFormatter based on deprecation warning
+from pythonjsonlogger.json import JsonFormatter
 
 def setup_logging():
     logger = logging.getLogger() # Get root logger
@@ -30,7 +31,8 @@ def setup_logging():
 
     log_handler = logging.StreamHandler()
     # Use a more detailed fmt string as per the example in the prompt
-    formatter = jsonlogger.JsonFormatter(
+    # Use the directly imported JsonFormatter
+    formatter = JsonFormatter(
         fmt='%(asctime)s %(levelname)s %(name)s %(module)s %(funcName)s %(lineno)d %(message)s',
         datefmt='%Y-%m-%dT%H:%M:%S%z',
         rename_fields={'levelname': 'level'} # common practice to rename for some log systems

@@ -198,21 +198,32 @@ def test_main_handles_spotify_api_error(
     mock_get_session.return_value.close.assert_called_once()
 
 
-@patch('backend.main.logging.error') # Added for logging check
+@patch('backend.main.logger.error') # Changed from logging.error to logger.error
 @patch('backend.main.get_db_engine', side_effect=Exception("Simulated DB Connection Error"))
-def test_main_handles_db_engine_error(mock_get_db_engine_fails, mock_logging_error): # Added mock_logging_error
+def test_main_handles_db_engine_error(mock_get_db_engine_fails, mock_logger_error): # Renamed mock_logging_error
     from backend.main import process_spotify_data
 
     process_spotify_data() # No try-except block here in the test
 
     mock_get_db_engine_fails.assert_called_once()
-    mock_logging_error.assert_called_once()
+    mock_logger_error.assert_called_once()
     # Optional: More specific check on what was logged
-    args, kwargs = mock_logging_error.call_args
+    args, kwargs = mock_logger_error.call_args
     # Example: Check if the log message contains part of the error and exc_info=True
     # This depends on the exact log message format in main.py
-    assert "Simulated DB Connection Error" in str(args[0]) or "Simulated DB Connection Error" in str(kwargs) # More flexible check
-    assert kwargs.get('exc_info') is True
+    # The first argument to logger.error is the message string.
+    # In main.py, it's "Database error encountered." or "An unexpected error occurred..."
+    # The actual exception is in exc_info=True or passed as a string in the message.
+    # The check `assert "Simulated DB Connection Error" in str(args[0])` might fail if the message is generic.
+    # The check `exc_info=True` is more robust for this case.
+    # The actual message logged by main.py for a get_db_engine failure (which raises DatabaseError) is:
+    # logger.error("Database error encountered.", exc_info=True)
+    # If get_db_engine raises a generic Exception, it's:
+    # logger.error("An unexpected error occurred during data processing.", exc_info=True)
+    # Since we mock get_db_engine to raise Exception("Simulated DB Connection Error"),
+    # it will be caught by the generic `except Exception as e:`
+    assert "An unexpected error occurred" in args[0] # Check the generic message
+    assert kwargs.get('exc_info') is True # Check that exc_info was passed
 
 
 @patch('backend.main.SpotifyItemNormalizer')

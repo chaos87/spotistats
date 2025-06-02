@@ -1,3 +1,4 @@
+import os # Added import os
 import unittest
 import datetime
 import logging
@@ -144,6 +145,7 @@ class TestIngestionLogic(unittest.TestCase):
     @patch('backend.main.upsert_artist')
     @patch('backend.main.upsert_album')
     @patch('backend.main.upsert_track')
+    @patch.dict(os.environ, {"DATABASE_URL": TEST_SQLALCHEMY_DATABASE_URL, "LOG_LEVEL": "DEBUG"}) # Added to provide DATABASE_URL
     def test_process_spotify_data_flow_logic(
         self, mock_upsert_track, mock_upsert_album, mock_upsert_artist,
         mock_insert_listen, mock_normalizer_class, mock_get_max_played_at,

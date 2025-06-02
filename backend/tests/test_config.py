@@ -5,6 +5,7 @@ import os
 # Ensure imports are correct for the project structure
 # Assuming tests are run from the 'backend' directory or PYTHONPATH is set
 from backend.src.config import get_env_variable
+from backend.src.exceptions import ConfigurationError # Added import
 
 @pytest.fixture(autouse=True)
 def manage_env_vars():
@@ -28,18 +29,19 @@ def test_get_env_variable_missing_no_default():
     if test_key in os.environ:
         del os.environ[test_key]
 
-    with pytest.raises(ValueError, match=f"Environment variable '{test_key}' not found."):
-        get_env_variable(test_key)
+    # Updated to expect ConfigurationError and the new message format
+    with pytest.raises(ConfigurationError, match=f"Missing critical environment variable: {test_key}"):
+        get_env_variable(test_key) # is_critical defaults to True
 
-def test_get_env_variable_missing_with_default():
-    """Test retrieval of a default value when a variable is missing."""
-    test_key = "MISSING_TEST_VAR_WITH_DEFAULT"
-    default_val = "default_value"
+def test_get_env_variable_missing_not_critical(): # Renamed and updated logic
+    """Test retrieval of None when a non-critical variable is missing."""
+    test_key = "MISSING_TEST_VAR_NOT_CRITICAL"
     # Ensure the variable is not in the environment for this test
     if test_key in os.environ:
         del os.environ[test_key]
 
-    assert get_env_variable(test_key, default_value=default_val) == default_val
+    # Updated to use is_critical=False and expect None
+    assert get_env_variable(test_key, is_critical=False) is None
 
 def test_get_env_variable_empty_string_value():
     """Test retrieval of an environment variable that is an empty string."""
