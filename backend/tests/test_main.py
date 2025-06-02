@@ -26,26 +26,26 @@ def setup_happy_path_mocks(
     access_token="mock_access_token"
     ):
 
-    if mock_get_spotify_credentials: # Allow skipping if already handled by test-specific side_effect
+    if mock_get_spotify_credentials:
         mock_get_spotify_credentials.return_value = ("test_client_id", "test_client_secret", "test_refresh_token")
 
-    if mock_spotify_oauth_client: # Allow skipping
+    if mock_spotify_oauth_client:
         mock_oauth_instance = mock_spotify_oauth_client.return_value
         mock_oauth_instance.get_access_token_from_refresh.return_value = access_token
 
-    if mock_get_db_engine: # Allow skipping
+    if mock_get_db_engine:
         mock_db_engine_instance = MagicMock()
         mock_get_db_engine.return_value = mock_db_engine_instance
 
-    if mock_get_session: # Allow skipping
+    if mock_get_session:
         mock_session_instance = MagicMock()
         mock_session_instance.name = "mock_session_instance"
         mock_get_session.return_value = mock_session_instance
 
-    if mock_get_max_played_at: # Allow skipping
+    if mock_get_max_played_at:
         mock_get_max_played_at.return_value = max_played_at_return
 
-    if mock_get_recently_played: # Allow skipping
+    if mock_get_recently_played:
         mock_get_recently_played.return_value = recently_played_return
 
 
@@ -95,11 +95,8 @@ def test_main_successful_run(
     mock_upsert_track.return_value = {"track_id": "track_id_1"}
     mock_insert_listen.return_value = mock_listen_obj
 
-    import importlib
-    from backend import main as main_module
-    importlib.reload(main_module)
-
-    main_module.process_spotify_data()
+    from backend.main import process_spotify_data
+    process_spotify_data()
 
     mock_get_spotify_credentials.assert_called_once()
     mock_spotify_oauth_client.assert_called_once_with("test_client_id", "test_client_secret", "test_refresh_token")
@@ -127,12 +124,9 @@ def test_main_successful_run(
 
 @patch('backend.main.get_spotify_credentials', side_effect=ValueError("Simulated Config Error"))
 def test_main_handles_config_value_error(mock_get_credentials_fails):
-    import importlib
-    from backend import main as main_module
-    importlib.reload(main_module)
-
+    from backend.main import process_spotify_data
     try:
-        main_module.process_spotify_data()
+        process_spotify_data()
     except Exception as e:
         pytest.fail(f"process_spotify_data() raised an unhandled exception on config error: {e}")
     mock_get_credentials_fails.assert_called_once()
@@ -144,30 +138,22 @@ def test_main_handles_spotify_auth_error(
     mock_spotify_oauth_client,
     mock_get_credentials
 ):
-    # Setup for this specific error
     mock_get_credentials.return_value = ("test_id", "test_secret", "test_refresh")
     mock_oauth_instance = mock_spotify_oauth_client.return_value
     mock_oauth_instance.get_access_token_from_refresh.side_effect = SpotifyAuthError("Simulated Auth Error")
 
-    # Mocks for functions that might be called in finally block if session was opened
-    with patch('backend.main.get_db_engine', return_value=MagicMock()) as mock_db_engine, \
+    with patch('backend.main.get_db_engine', return_value=MagicMock()), \
          patch('backend.main.get_session', return_value=MagicMock()) as mock_session:
-
-        import importlib
-        from backend import main as main_module
-        importlib.reload(main_module)
+        from backend.main import process_spotify_data
         try:
-            main_module.process_spotify_data()
+            process_spotify_data()
         except Exception as e:
             pytest.fail(f"process_spotify_data() raised an unhandled exception on SpotifyAuthError: {e}")
 
         mock_get_credentials.assert_called_once()
         mock_spotify_oauth_client.assert_called_once()
         mock_oauth_instance.get_access_token_from_refresh.assert_called_once()
-        # Check if session was potentially opened and closed if error happens after session init
-        # In this case, error is before session init, so these might not be called.
-        # Adjust if process_spotify_data structure changes regarding session opening.
-        if mock_session.called: # Only assert close if session was obtained
+        if mock_session.called:
              mock_session.return_value.close.assert_called_once()
 
 
@@ -179,11 +165,10 @@ def test_main_handles_spotify_auth_error(
 def test_main_handles_spotify_api_error(
     mock_get_recently_played,
     mock_spotify_oauth_client,
-    mock_get_spotify_credentials, # Corrected: Added argument
+    mock_get_spotify_credentials,
     mock_get_session,
     mock_get_db_engine
 ):
-    # Setup for this specific error
     mock_get_spotify_credentials.return_value = ("test_id", "test_client_secret", "test_refresh_token")
     mock_oauth_instance = mock_spotify_oauth_client.return_value
     mock_oauth_instance.get_access_token_from_refresh.return_value = "mock_access_token"
@@ -193,13 +178,10 @@ def test_main_handles_spotify_api_error(
     mock_session_instance = MagicMock()
     mock_get_session.return_value = mock_session_instance
 
-    # get_max_played_at would be called before get_recently_played_tracks
     with patch('backend.main.get_max_played_at', return_value=None):
-        import importlib
-        from backend import main as main_module
-        importlib.reload(main_module)
+        from backend.main import process_spotify_data
         try:
-            main_module.process_spotify_data()
+            process_spotify_data()
         except Exception as e:
             pytest.fail(f"process_spotify_data() raised an unhandled exception on SpotifyAPIError: {e}")
 
@@ -210,11 +192,9 @@ def test_main_handles_spotify_api_error(
 
 @patch('backend.main.get_db_engine', side_effect=Exception("Simulated DB Connection Error"))
 def test_main_handles_db_engine_error(mock_get_db_engine_fails):
-    import importlib
-    from backend import main as main_module
-    importlib.reload(main_module)
+    from backend.main import process_spotify_data
     try:
-        main_module.process_spotify_data()
+        process_spotify_data()
     except Exception as e:
         pytest.fail(f"process_spotify_data() raised an unhandled exception on DB engine error: {e}")
 
@@ -260,13 +240,9 @@ def test_main_handles_db_insert_error(
     mock_upsert_album.return_value = {"album_id": "some_id"}
     mock_upsert_track.return_value = {"track_id": "some_id"}
 
-    # insert_listen is the one that fails (already patched with side_effect)
-
-    import importlib
-    from backend import main as main_module
-    importlib.reload(main_module)
+    from backend.main import process_spotify_data
     try:
-        main_module.process_spotify_data()
+        process_spotify_data()
     except Exception as e:
         pytest.fail(f"process_spotify_data() raised an unhandled exception on DB insert error: {e}")
 
@@ -294,11 +270,8 @@ def test_main_no_items_fetched(
         recently_played_return={"items": []}
     )
 
-    import importlib
-    from backend import main as main_module
-    importlib.reload(main_module)
-
-    main_module.process_spotify_data()
+    from backend.main import process_spotify_data
+    process_spotify_data()
 
     mock_get_recently_played.assert_called_once_with("mock_access_token", limit=50, after=None)
     mock_insert_listen.assert_not_called()
