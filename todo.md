@@ -120,25 +120,25 @@ This checklist is based on the project specification, broken down into iterative
 
 ### Module 2.4: Podcast Data Integration
 
--   [ ] **Define SQLAlchemy Models for Podcast Entities & Update Listen FKs (`backend/src/models.py`)**
-    -   [ ] Define `PodcastSeries` and `PodcastEpisode` ORM models.
-    -   [ ] Modify `Listen` model:
-        -   [ ] Add `ForeignKey` for `episode_id` to `podcast_episodes`.
-        -   [ ] Update `CHECK` constraint to correctly handle `item_type`, `track_id`, `episode_id`, and `artist_id`/`album_id` nullability for podcasts.
-    -   [ ] Add tests for new models and updated `Listen` constraint.
--   [ ] **Enhance Normalizer for Podcasts (`backend/src/normalizer.py`)**
-    -   [ ] Add `normalize_episode_item(item)` method to return `PodcastSeries`, `PodcastEpisode`, `Listen` objects.
-    -   [ ] Modify the main normalization entry point to differentiate between 'track' and 'episode' items.
--   [ ] **Enhance Ingestion for Podcasts (`backend/src/database.py` and `main.py`)**
-    -   [ ] In `backend/src/database.py`:
-        -   [ ] Add `upsert_podcast_series(session, series_obj)`.
-        -   [ ] Add `upsert_podcast_episode(session, episode_obj)`.
-    -   [ ] Update `backend/main.py` to:
-        -   [ ] Handle `item['track']['type'] == 'episode'`.
-        -   [ ] Call new podcast normalization and UPSERTs.
-        -   [ ] Insert `Listen` with `episode_id` populated and `artist_id`/`album_id` as NULL.
-    -   [ ] Create `backend/tests/test_podcast_ingestion.py`.
-    -   [ ] Write integration tests for podcast ingestion (mocked Spotify responses).
+-   [x] **Define SQLAlchemy Models for Podcast Entities & Update Listen FKs (`backend/src/models.py`)**
+    -   [x] Define `PodcastSeries` and `PodcastEpisode` ORM models.
+    -   [x] Modify `Listen` model:
+        -   [x] Add `ForeignKey` for `episode_id` to `podcast_episodes`.
+        -   [x] Update `CHECK` constraint to correctly handle `item_type`, `track_id`, `episode_id`, and `artist_id`/`album_id` nullability for podcasts.
+    -   [x] Add tests for new models and updated `Listen` constraint.
+-   [x] **Enhance Normalizer for Podcasts (`backend/src/normalizer.py`)**
+    -   [x] Add `normalize_episode_item(item)` method to return `PodcastSeries`, `PodcastEpisode`, `Listen` objects.
+    -   [x] Modify the main normalization entry point to differentiate between 'track' and 'episode' items.
+-   [x] **Enhance Ingestion for Podcasts (`backend/src/database.py` and `main.py`)**
+    -   [x] In `backend/src/database.py`:
+        -   [x] Add `upsert_podcast_series(session, series_obj)`.
+        -   [x] Add `upsert_podcast_episode(session, episode_obj)`.
+    -   [x] Update `backend/main.py` to:
+        -   [x] Handle `item['track']['type'] == 'episode'`.
+        -   [x] Call new podcast normalization and UPSERTs.
+        -   [x] Insert `Listen` with `episode_id` populated and `artist_id`/`album_id` as NULL.
+    -   [x] Create `backend/tests/test_podcast_ingestion.py`.
+    -   [x] Write integration tests for podcast ingestion (mocked Spotify responses).
 
 ### Module 2.5: Advanced Ingestion Features & Robustness
 
