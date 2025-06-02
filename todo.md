@@ -90,33 +90,33 @@ This checklist is based on the project specification, broken down into iterative
 
 ### Module 2.3: Initial Normalized Data Processing & Loading
 
--   [ ] **Define SQLAlchemy Models for Core Normalized Tables (`backend/src/models.py` or `database.py`)**
-    -   [ ] Define `Artist`, `Album`, `Track`, `Listen` ORM models.
-    -   [ ] Ensure `ForeignKeys` and `relationships` are correctly set.
-    -   [ ] Add `CheckConstraint` for `listens.item_type` and `track_id`/`episode_id` (initial version for `track_id` being NOT NULL and `episode_id` NULL for type 'track').
-    -   [ ] Add tests for model definition and mapping.
--   [ ] **Implement Spotify Data Normalizer (Music Only) (`backend/src/normalizer.py`)**
-    -   [ ] Create `backend/src/normalizer.py`.
-    -   [ ] Define `SpotifyMusicNormalizer` class with `normalize_track_item(item)`.
-    -   [ ] Extract and return `Artist`, `Album`, `Track`, `Listen` ORM objects.
-    -   [ ] Set `item_type` for `Listen` to 'track'.
-    -   [ ] Create `backend/tests/test_normalizer.py`.
-    -   [ ] Write unit tests for `normalize_track_item` using mocked Spotify JSON.
--   [ ] **Implement Database UPSERT & Ingestion Logic (`backend/src/database.py` and `main.py`)**
-    -   [ ] In `backend/src/database.py`:
-        -   [ ] Implement `get_max_played_at(engine)`.
-        -   [ ] Implement `upsert_artist(session, artist_obj)` using `ON CONFLICT`.
-        -   [ ] Implement `upsert_album(session, album_obj)` using `ON CONFLICT`.
-        -   [ ] Implement `upsert_track(session, track_obj)` using `ON CONFLICT`.
-        -   [ ] Implement `insert_listen(session, listen_obj)` handling `IntegrityError` for `played_at` uniqueness.
-    -   [ ] Update `backend/main.py`:
-        -   [ ] Get `max_played_at`.
-        -   [ ] Iterate fetched Spotify items.
-        -   [ ] Filter items based on `played_at > max_played_at`.
-        -   [ ] For `type == 'track'`: normalize, UPSERT entities, insert listen.
-        -   [ ] Add comprehensive logging for ingestion progress.
-    -   [ ] Create `backend/tests/test_ingestion_logic.py`.
-    -   [ ] Write integration tests using a test DB to verify incremental ingestion, UPSERTs, and de-duplication.
+-   [x] **Define SQLAlchemy Models for Core Normalized Tables (`backend/src/models.py` or `database.py`)**
+    -   [x] Define `Artist`, `Album`, `Track`, `Listen` ORM models.
+    -   [x] Ensure `ForeignKeys` and `relationships` are correctly set.
+    -   [x] Add `CheckConstraint` for `listens.item_type` and `track_id`/`episode_id` (initial version for `track_id` being NOT NULL and `episode_id` NULL for type 'track').
+    -   [x] Add tests for model definition and mapping.
+-   [x] **Implement Spotify Data Normalizer (Music Only) (`backend/src/normalizer.py`)**
+    -   [x] Create `backend/src/normalizer.py`.
+    -   [x] Define `SpotifyMusicNormalizer` class with `normalize_track_item(item)`.
+    -   [x] Extract and return `Artist`, `Album`, `Track`, `Listen` ORM objects.
+    -   [x] Set `item_type` for `Listen` to 'track'.
+    -   [x] Create `backend/tests/test_normalizer.py`.
+    -   [x] Write unit tests for `normalize_track_item` using mocked Spotify JSON.
+-   [x] **Implement Database UPSERT & Ingestion Logic (`backend/src/database.py` and `main.py`)**
+    -   [x] In `backend/src/database.py`:
+        -   [x] Implement `get_max_played_at(engine)`.
+        -   [x] Implement `upsert_artist(session, artist_obj)` using `ON CONFLICT`.
+        -   [x] Implement `upsert_album(session, album_obj)` using `ON CONFLICT`.
+        -   [x] Implement `upsert_track(session, track_obj)` using `ON CONFLICT`.
+        -   [x] Implement `insert_listen(session, listen_obj)` handling `IntegrityError` for `played_at` uniqueness.
+    -   [x] Update `backend/main.py`:
+        -   [x] Get `max_played_at`.
+        -   [x] Iterate fetched Spotify items.
+        -   [x] Filter items based on `played_at > max_played_at`.
+        -   [x] For `type == 'track'`: normalize, UPSERT entities, insert listen.
+        -   [x] Add comprehensive logging for ingestion progress.
+    -   [x] Create `backend/tests/test_ingestion_logic.py`.
+    -   [x] Write integration tests using a test DB to verify incremental ingestion, UPSERTs, and de-duplication.
 
 ### Module 2.4: Podcast Data Integration
 
