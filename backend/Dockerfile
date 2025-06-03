@@ -13,7 +13,7 @@ COPY pyproject.toml poetry.lock* /app/
 # Install project dependencies
 # --no-dev: Do not install development dependencies
 # --no-root: Do not install the project itself, only dependencies
-RUN poetry install --no-dev --no-root
+RUN poetry install --without dev --no-root
 
 # Copy the rest of the application code
 COPY ./src /app/src
