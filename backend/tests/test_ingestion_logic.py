@@ -10,17 +10,17 @@ from sqlalchemy import create_engine, text, JSON, TEXT
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 
-from src.models import Base, Artist, Album, Track, Listen, RecentlyPlayedTracksRaw, PodcastSeries, PodcastEpisode
+from backend.src.models import Base, Artist, Album, Track, Listen, RecentlyPlayedTracksRaw, PodcastSeries, PodcastEpisode
 # Import for mocking normalizer
-from src.normalizer import SpotifyItemNormalizer as RealNormalizer
+from backend.src.normalizer import SpotifyItemNormalizer as RealNormalizer
 
-from src.database import (
+from backend.src.database import (
     get_max_played_at as real_get_max_played_at,
     upsert_artist, upsert_album, upsert_track,
     insert_listen as real_insert_listen,
     init_db
 )
-from main import process_spotify_data
+from backend.main import process_spotify_data
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -136,16 +136,16 @@ class TestIngestionLogic(unittest.TestCase):
 
         self.assertEqual(actual_played_at_from_db, expected_played_at_dt)
 
-    @patch('main.get_spotify_credentials')
-    @patch('main.SpotifyOAuthClient')
-    @patch('main.get_recently_played_tracks')
-    @patch('main.get_session')
-    @patch('main.get_max_played_at')
-    @patch('main.SpotifyItemNormalizer')
-    @patch('main.insert_listen')
-    @patch('main.upsert_artist')
-    @patch('main.upsert_album')
-    @patch('main.upsert_track')
+    @patch('backend.main.get_spotify_credentials')
+    @patch('backend.main.SpotifyOAuthClient')
+    @patch('backend.main.get_recently_played_tracks')
+    @patch('backend.main.get_session')
+    @patch('backend.main.get_max_played_at')
+    @patch('backend.main.SpotifyItemNormalizer')
+    @patch('backend.main.insert_listen')
+    @patch('backend.main.upsert_artist')
+    @patch('backend.main.upsert_album')
+    @patch('backend.main.upsert_track')
     @patch.dict(os.environ, {"DATABASE_URL": TEST_SQLALCHEMY_DATABASE_URL, "LOG_LEVEL": "DEBUG"}) # Added to provide DATABASE_URL
     def test_process_spotify_data_flow_logic(
         self, mock_upsert_track, mock_upsert_album, mock_upsert_artist,

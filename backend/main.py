@@ -1,69 +1,24 @@
 # At the top of main.py
-from src.logging_config import setup_logging
+from backend.src.logging_config import setup_logging
 setup_logging() # Call this early
 
 import logging # Keep this for using logging.getLogger() later
 import os
 import datetime
 from sqlalchemy.orm import Session
-from src.database import (
+from backend.src.database import (
     get_db_engine, init_db, get_session, get_max_played_at,
     upsert_artist, upsert_album, upsert_track, insert_listen,
     upsert_podcast_series, upsert_podcast_episode
 )
-from src.models import Artist, Album, Track, Listen, PodcastSeries, PodcastEpisode
-from src.normalizer import SpotifyItemNormalizer
-from src.exceptions import DatabaseError, ConfigurationError, SpotifyAuthError, SpotifyAPIError # Updated import
+from backend.src.models import Artist, Album, Track, Listen, PodcastSeries, PodcastEpisode
+from backend.src.normalizer import SpotifyItemNormalizer
+from backend.src.exceptions import DatabaseError, ConfigurationError, SpotifyAuthError, SpotifyAPIError # Updated import
 # For this subtask, we'll use the placeholder functions in main.py for Spotify operations,
 # so ConfigurationError for Spotify credentials won't be hit from config.py yet.
-# from backend.src.config import get_spotify_credentials # Would be ideal
-# from backend.src.spotify_client import SpotifyOAuthClient # Would be ideal
-# from backend.src.spotify_data import get_recently_played_tracks # Would be ideal
-
-# Placeholder get_spotify_credentials - real one would be in config.py
-def get_spotify_credentials(): # In a real scenario, this would be `from backend.src.config import get_spotify_credentials`
-    # This placeholder won't raise ConfigurationError itself.
-    # If SPOTIFY_CLIENT_ID etc. were read here using os.getenv directly and were missing,
-    # it would be the place for ConfigurationError.
-    # For now, we rely on the database URL check in config.py to test ConfigurationError handling.
-    logging.warning("Using placeholder get_spotify_credentials() in main.py")
-    return "dummy_client_id", "dummy_client_secret", "dummy_refresh_token" # These would trigger ConfigurationError if get_env_variable was used here directly
-
-# Placeholder SpotifyOAuthClient - real one in spotify_client.py
-class SpotifyOAuthClient: # In a real scenario, this would be `from backend.src.spotify_client import SpotifyOAuthClient`
-    def __init__(self, client_id, client_secret, refresh_token):
-        logging.warning(f"Using placeholder SpotifyOAuthClient in main.py with {client_id[:5]}...")
-        # Real client might raise SpotifyAuthError on init if refresh token is invalid immediately
-        self.access_token = "DUMMY_ACCESS_TOKEN_FOR_SUBTASK_MAIN_PY" # Placeholder token
-
-    def get_access_token_from_refresh(self):
-        # Real method in spotify_client.py raises SpotifyAuthError
-        logging.warning("Using placeholder get_access_token_from_refresh() in main.py")
-        # Simulate an auth error for testing if needed:
-        # raise SpotifyAuthError("Simulated auth error from placeholder client")
-        return self.access_token
-
-# Placeholder get_recently_played_tracks - real one in spotify_data.py
-def get_recently_played_tracks(access_token, limit=50, after=None): # In a real scenario, this would be `from backend.src.spotify_data import get_recently_played_tracks`
-    logging.warning(f"Using placeholder get_recently_played_tracks() in main.py with token {access_token[:5]}..., limit {limit}, after {after}")
-    # Real function might raise SpotifyAPIError or SpotifyAuthError (if token expired mid-request)
-    # Simulate an API error for testing if needed:
-    # raise SpotifyAPIError("Simulated API error from placeholder tracks fetch")
-    return {
-        "items": [
-            {
-                "track": {
-                    "id": "track_id_1", "name": "Test Track 1", "type": "track",
-                    "artists": [{"id": "artist_id_1", "name": "Test Artist 1", "external_urls": {"spotify":"artist_url_1"}}],
-                    "album": {"id": "album_id_1", "name": "Test Album 1", "images": [{"url": "img_url_1"}], "external_urls": {"spotify":"album_url_1"}, "release_date":"2023-01-01", "release_date_precision":"day"},
-                }, "played_at": "2023-01-15T10:30:00Z"
-            },
-            {
-                "track": {"id": "episode_id_1", "name": "Test Episode 1", "type": "episode"},
-                "played_at": "2023-01-15T11:00:00Z"
-            }
-        ], "next": None
-    }
+from backend.src.config import get_spotify_credentials
+from backend.src.spotify_client import SpotifyOAuthClient
+from backend.src.spotify_data import get_recently_played_tracks
 
 # Remove: logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s')
 logger = logging.getLogger(__name__) # Standard way to get logger per module
