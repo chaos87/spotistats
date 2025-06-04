@@ -9,9 +9,9 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError # Added SQLAlchemyErr
 from dotenv import load_dotenv
 
 # Import Base and specific models used by functions in this file
-from backend.src.models import Base, RecentlyPlayedTracksRaw, Artist, Album, Track, Listen, PodcastSeries, PodcastEpisode # Added Artist, Album, Track, Listen
-from backend.src.exceptions import DatabaseError # Import custom DatabaseError
-from backend.src.config import get_database_url_config # Import config function for DB URL
+from .models import Base, RecentlyPlayedTracksRaw, Artist, Album, Track, Listen, PodcastSeries, PodcastEpisode # Added Artist, Album, Track, Listen
+from .exceptions import DatabaseError # Import custom DatabaseError
+from .config import get_database_url_config # Import config function for DB URL
 
 load_dotenv() # Ensure .env is loaded for DATABASE_URL. TODO: This might be redundant if config.py handles it.
 
