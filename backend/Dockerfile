@@ -22,8 +22,8 @@ COPY pyproject.toml poetry.lock* /app/
 RUN poetry install --without dev --no-root
 
 # Copy the rest of the application code
-COPY ./src /app/src
-COPY ./main.py /app/main.py
+COPY ./src /app/backend/src
+COPY ./main.py /app/backend/main.py
 
 # Command to run the application
-CMD ["python", "main.py"]
+CMD ["python", "backend/main.py"]

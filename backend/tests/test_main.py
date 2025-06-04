@@ -200,7 +200,9 @@ def test_main_handles_spotify_api_error(
 
 @patch('backend.main.logger.error') # Changed from logging.error to logger.error
 @patch('backend.main.get_db_engine', side_effect=Exception("Simulated DB Connection Error"))
-def test_main_handles_db_engine_error(mock_get_db_engine_fails, mock_logger_error): # Renamed mock_logging_error
+@patch('backend.main.get_spotify_credentials') # Added this mock
+def test_main_handles_db_engine_error(mock_get_spotify_credentials, mock_get_db_engine_fails, mock_logger_error): # Renamed mock_logging_error and added new mock
+    mock_get_spotify_credentials.return_value = ("test_id", "test_secret", "test_refresh") # Mock successful credential retrieval
     from backend.main import process_spotify_data
 
     process_spotify_data() # No try-except block here in the test
