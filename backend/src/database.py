@@ -1,4 +1,5 @@
 import os
+import json # Added
 import datetime # Added
 import logging # Added
 from typing import Optional # Added
@@ -105,17 +106,28 @@ def get_max_played_at(session) -> Optional[datetime.datetime]:
 
 def upsert_artist(session, artist_obj: Artist) -> dict:
     """Upserts an artist record into the database."""
-    genres = artist_obj.genres if artist_obj.genres is not None else []
+
+    genres_val = artist_obj.genres
+    if session.bind.dialect.name == 'sqlite':
+        if isinstance(genres_val, list):
+            genres_to_insert = json.dumps(genres_val)
+        elif genres_val is None: # Handle None explicitly for SQLite
+            genres_to_insert = json.dumps([])
+        else: # Already a string or other type, pass through (or error if not expected)
+            genres_to_insert = genres_val
+    else: # For PostgreSQL or other dialects
+        genres_to_insert = genres_val if genres_val is not None else []
+
     try:
         stmt = pg_insert(Artist).values(
             artist_id=artist_obj.artist_id, name=artist_obj.name,
             spotify_url=artist_obj.spotify_url, image_url=artist_obj.image_url,
-            genres=genres
+            genres=genres_to_insert  # Use the processed value
         ).on_conflict_do_update(
             index_elements=[Artist.artist_id],
             set_=dict(
                 name=artist_obj.name, spotify_url=artist_obj.spotify_url,
-                image_url=artist_obj.image_url, genres=genres
+                image_url=artist_obj.image_url, genres=genres_to_insert  # Use the processed value
             )
         ).returning(Artist.artist_id, Artist.name, Artist.spotify_url, Artist.image_url, Artist.genres)
         result_row = session.execute(stmt).fetchone()
@@ -150,14 +162,26 @@ def upsert_album(session, album_obj: Album) -> dict:
 
 def upsert_track(session, track_obj: Track) -> dict:
     """Upserts a track record into the database."""
-    available_markets = track_obj.available_markets if track_obj.available_markets is not None else []
+
+    markets_val = track_obj.available_markets
+    if session.bind.dialect.name == 'sqlite':
+        if isinstance(markets_val, list):
+            markets_to_insert = json.dumps(markets_val)
+        elif markets_val is None:
+            markets_to_insert = json.dumps([])
+        else:
+            markets_to_insert = markets_val
+    else: # For PostgreSQL or other dialects
+        markets_to_insert = markets_val if markets_val is not None else []
+
     try:
         stmt = pg_insert(Track).values(
             track_id=track_obj.track_id, name=track_obj.name,
             duration_ms=track_obj.duration_ms, explicit=track_obj.explicit,
             popularity=track_obj.popularity, preview_url=track_obj.preview_url,
             spotify_url=track_obj.spotify_url, album_id=track_obj.album_id,
-            available_markets=available_markets, last_played_at=track_obj.last_played_at
+            available_markets=markets_to_insert,  # Use the processed value
+            last_played_at=track_obj.last_played_at
         )
         stmt = stmt.on_conflict_do_update(
             index_elements=[Track.track_id],
@@ -169,7 +193,7 @@ def upsert_track(session, track_obj: Track) -> dict:
                 'preview_url': stmt.excluded.preview_url,
                 'spotify_url': stmt.excluded.spotify_url,
                 'album_id': stmt.excluded.album_id,
-                'available_markets': stmt.excluded.available_markets,
+                'available_markets': stmt.excluded.available_markets, # Use stmt.excluded here
                 'last_played_at': case(
                     (stmt.excluded.last_played_at > Track.last_played_at, stmt.excluded.last_played_at),
                     else_=Track.last_played_at
