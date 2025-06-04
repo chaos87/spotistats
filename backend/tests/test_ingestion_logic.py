@@ -1,5 +1,6 @@
 import os # Added import os
 import unittest
+import json # Added for conditional parsing in tests
 import datetime
 import logging
 from unittest.mock import patch, MagicMock, call # Ensure 'call' is imported
@@ -9,17 +10,17 @@ from sqlalchemy import create_engine, text, JSON, TEXT
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 
-from backend.src.models import Base, Artist, Album, Track, Listen, RecentlyPlayedTracksRaw, PodcastSeries, PodcastEpisode
+from src.models import Base, Artist, Album, Track, Listen, RecentlyPlayedTracksRaw, PodcastSeries, PodcastEpisode
 # Import for mocking normalizer
-from backend.src.normalizer import SpotifyItemNormalizer as RealNormalizer
+from src.normalizer import SpotifyItemNormalizer as RealNormalizer
 
-from backend.src.database import (
+from src.database import (
     get_max_played_at as real_get_max_played_at,
     upsert_artist, upsert_album, upsert_track,
     insert_listen as real_insert_listen,
     init_db
 )
-from backend.main import process_spotify_data
+from main import process_spotify_data
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -135,16 +136,16 @@ class TestIngestionLogic(unittest.TestCase):
 
         self.assertEqual(actual_played_at_from_db, expected_played_at_dt)
 
-    @patch('backend.main.get_spotify_credentials')
-    @patch('backend.main.SpotifyOAuthClient')
-    @patch('backend.main.get_recently_played_tracks')
-    @patch('backend.main.get_session')
-    @patch('backend.main.get_max_played_at')
-    @patch('backend.main.SpotifyItemNormalizer')
-    @patch('backend.main.insert_listen')
-    @patch('backend.main.upsert_artist')
-    @patch('backend.main.upsert_album')
-    @patch('backend.main.upsert_track')
+    @patch('main.get_spotify_credentials')
+    @patch('main.SpotifyOAuthClient')
+    @patch('main.get_recently_played_tracks')
+    @patch('main.get_session')
+    @patch('main.get_max_played_at')
+    @patch('main.SpotifyItemNormalizer')
+    @patch('main.insert_listen')
+    @patch('main.upsert_artist')
+    @patch('main.upsert_album')
+    @patch('main.upsert_track')
     @patch.dict(os.environ, {"DATABASE_URL": TEST_SQLALCHEMY_DATABASE_URL, "LOG_LEVEL": "DEBUG"}) # Added to provide DATABASE_URL
     def test_process_spotify_data_flow_logic(
         self, mock_upsert_track, mock_upsert_album, mock_upsert_artist,
@@ -418,7 +419,10 @@ class TestIngestionLogic(unittest.TestCase):
         self.assertEqual(db_lpa_recent, more_recent_played_at_dt)
         # Ensure other fields like name are also updated as per normal upsert logic
         self.assertEqual(db_track_recent.name, "Test Track Updated Recent LPA")
-        self.assertEqual(db_track_recent.available_markets, ["US", "CA"])
+        db_markets = db_track_recent.available_markets
+        if self.engine.name == 'sqlite' and isinstance(db_markets, str):
+            db_markets = json.loads(db_markets)
+        self.assertEqual(db_markets, ["US", "CA"])
 
 
         # Scenario 2: Attempt update with older last_played_at

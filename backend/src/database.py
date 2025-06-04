@@ -132,7 +132,19 @@ def upsert_artist(session, artist_obj: Artist) -> dict:
         ).returning(Artist.artist_id, Artist.name, Artist.spotify_url, Artist.image_url, Artist.genres)
         result_row = session.execute(stmt).fetchone()
         logger.debug("Upserted artist successfully.", extra={"artist_id": artist_obj.artist_id, "returned_data_is_none": result_row is None})
-        return result_row._asdict() if result_row else None
+
+        if result_row:
+            # Convert Row to a mutable dictionary
+            data_to_return = result_row._asdict()
+            if session.bind.dialect.name == 'sqlite' and isinstance(data_to_return.get('genres'), str):
+                try:
+                    data_to_return['genres'] = json.loads(data_to_return['genres'])
+                except json.JSONDecodeError:
+                    logger.warning(f"Failed to JSON decode genres string for artist {data_to_return.get('artist_id')} from SQLite: {data_to_return.get('genres')}")
+                    # Keep the original string if decoding fails, or handle as error
+            return data_to_return
+        else:
+            return None
     except SQLAlchemyError as e:
         logger.error("SQLAlchemyError in upsert_artist.", exc_info=True, extra={"artist_id": artist_obj.artist_id, "error": str(e)})
         raise DatabaseError(f"Failed to upsert artist {artist_obj.artist_id}: {e}") from e
@@ -202,7 +214,19 @@ def upsert_track(session, track_obj: Track) -> dict:
         ).returning(Track.track_id, Track.name, Track.duration_ms, Track.explicit, Track.popularity, Track.preview_url, Track.spotify_url, Track.album_id, Track.available_markets, Track.last_played_at)
         result_row = session.execute(stmt).fetchone()
         logger.debug("Upserted track successfully.", extra={"track_id": track_obj.track_id, "returned_data_is_none": result_row is None})
-        return result_row._asdict() if result_row else None
+
+        if result_row:
+            # Convert Row to a mutable dictionary
+            data_to_return = result_row._asdict()
+            if session.bind.dialect.name == 'sqlite' and isinstance(data_to_return.get('available_markets'), str):
+                try:
+                    data_to_return['available_markets'] = json.loads(data_to_return['available_markets'])
+                except json.JSONDecodeError:
+                    logger.warning(f"Failed to JSON decode available_markets string for track {data_to_return.get('track_id')} from SQLite: {data_to_return.get('available_markets')}")
+                    # Keep the original string if decoding fails, or handle as error
+            return data_to_return
+        else:
+            return None
     except SQLAlchemyError as e:
         logger.error("SQLAlchemyError in upsert_track.", exc_info=True, extra={"track_id": track_obj.track_id, "error": str(e)})
         raise DatabaseError(f"Failed to upsert track {track_obj.track_id}: {e}") from e
