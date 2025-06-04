@@ -1,4 +1,5 @@
 import os
+import json # Added
 import datetime # Added
 import logging # Added
 from typing import Optional # Added
@@ -9,9 +10,9 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError # Added SQLAlchemyErr
 from dotenv import load_dotenv
 
 # Import Base and specific models used by functions in this file
-from backend.src.models import Base, RecentlyPlayedTracksRaw, Artist, Album, Track, Listen, PodcastSeries, PodcastEpisode # Added Artist, Album, Track, Listen
-from backend.src.exceptions import DatabaseError # Import custom DatabaseError
-from backend.src.config import get_database_url_config # Import config function for DB URL
+from .models import Base, RecentlyPlayedTracksRaw, Artist, Album, Track, Listen, PodcastSeries, PodcastEpisode # Added Artist, Album, Track, Listen
+from .exceptions import DatabaseError # Import custom DatabaseError
+from .config import get_database_url_config # Import config function for DB URL
 
 load_dotenv() # Ensure .env is loaded for DATABASE_URL. TODO: This might be redundant if config.py handles it.
 
@@ -105,22 +106,45 @@ def get_max_played_at(session) -> Optional[datetime.datetime]:
 
 def upsert_artist(session, artist_obj: Artist) -> dict:
     """Upserts an artist record into the database."""
-    genres = artist_obj.genres if artist_obj.genres is not None else []
+
+    genres_val = artist_obj.genres
+    if session.bind.dialect.name == 'sqlite':
+        if isinstance(genres_val, list):
+            genres_to_insert = json.dumps(genres_val)
+        elif genres_val is None: # Handle None explicitly for SQLite
+            genres_to_insert = json.dumps([])
+        else: # Already a string or other type, pass through (or error if not expected)
+            genres_to_insert = genres_val
+    else: # For PostgreSQL or other dialects
+        genres_to_insert = genres_val if genres_val is not None else []
+
     try:
         stmt = pg_insert(Artist).values(
             artist_id=artist_obj.artist_id, name=artist_obj.name,
             spotify_url=artist_obj.spotify_url, image_url=artist_obj.image_url,
-            genres=genres
+            genres=genres_to_insert  # Use the processed value
         ).on_conflict_do_update(
             index_elements=[Artist.artist_id],
             set_=dict(
                 name=artist_obj.name, spotify_url=artist_obj.spotify_url,
-                image_url=artist_obj.image_url, genres=genres
+                image_url=artist_obj.image_url, genres=genres_to_insert  # Use the processed value
             )
         ).returning(Artist.artist_id, Artist.name, Artist.spotify_url, Artist.image_url, Artist.genres)
         result_row = session.execute(stmt).fetchone()
         logger.debug("Upserted artist successfully.", extra={"artist_id": artist_obj.artist_id, "returned_data_is_none": result_row is None})
-        return result_row._asdict() if result_row else None
+
+        if result_row:
+            # Convert Row to a mutable dictionary
+            data_to_return = result_row._asdict()
+            if session.bind.dialect.name == 'sqlite' and isinstance(data_to_return.get('genres'), str):
+                try:
+                    data_to_return['genres'] = json.loads(data_to_return['genres'])
+                except json.JSONDecodeError:
+                    logger.warning(f"Failed to JSON decode genres string for artist {data_to_return.get('artist_id')} from SQLite: {data_to_return.get('genres')}")
+                    # Keep the original string if decoding fails, or handle as error
+            return data_to_return
+        else:
+            return None
     except SQLAlchemyError as e:
         logger.error("SQLAlchemyError in upsert_artist.", exc_info=True, extra={"artist_id": artist_obj.artist_id, "error": str(e)})
         raise DatabaseError(f"Failed to upsert artist {artist_obj.artist_id}: {e}") from e
@@ -150,14 +174,26 @@ def upsert_album(session, album_obj: Album) -> dict:
 
 def upsert_track(session, track_obj: Track) -> dict:
     """Upserts a track record into the database."""
-    available_markets = track_obj.available_markets if track_obj.available_markets is not None else []
+
+    markets_val = track_obj.available_markets
+    if session.bind.dialect.name == 'sqlite':
+        if isinstance(markets_val, list):
+            markets_to_insert = json.dumps(markets_val)
+        elif markets_val is None:
+            markets_to_insert = json.dumps([])
+        else:
+            markets_to_insert = markets_val
+    else: # For PostgreSQL or other dialects
+        markets_to_insert = markets_val if markets_val is not None else []
+
     try:
         stmt = pg_insert(Track).values(
             track_id=track_obj.track_id, name=track_obj.name,
             duration_ms=track_obj.duration_ms, explicit=track_obj.explicit,
             popularity=track_obj.popularity, preview_url=track_obj.preview_url,
             spotify_url=track_obj.spotify_url, album_id=track_obj.album_id,
-            available_markets=available_markets, last_played_at=track_obj.last_played_at
+            available_markets=markets_to_insert,  # Use the processed value
+            last_played_at=track_obj.last_played_at
         )
         stmt = stmt.on_conflict_do_update(
             index_elements=[Track.track_id],
@@ -169,7 +205,7 @@ def upsert_track(session, track_obj: Track) -> dict:
                 'preview_url': stmt.excluded.preview_url,
                 'spotify_url': stmt.excluded.spotify_url,
                 'album_id': stmt.excluded.album_id,
-                'available_markets': stmt.excluded.available_markets,
+                'available_markets': stmt.excluded.available_markets, # Use stmt.excluded here
                 'last_played_at': case(
                     (stmt.excluded.last_played_at > Track.last_played_at, stmt.excluded.last_played_at),
                     else_=Track.last_played_at
@@ -178,7 +214,19 @@ def upsert_track(session, track_obj: Track) -> dict:
         ).returning(Track.track_id, Track.name, Track.duration_ms, Track.explicit, Track.popularity, Track.preview_url, Track.spotify_url, Track.album_id, Track.available_markets, Track.last_played_at)
         result_row = session.execute(stmt).fetchone()
         logger.debug("Upserted track successfully.", extra={"track_id": track_obj.track_id, "returned_data_is_none": result_row is None})
-        return result_row._asdict() if result_row else None
+
+        if result_row:
+            # Convert Row to a mutable dictionary
+            data_to_return = result_row._asdict()
+            if session.bind.dialect.name == 'sqlite' and isinstance(data_to_return.get('available_markets'), str):
+                try:
+                    data_to_return['available_markets'] = json.loads(data_to_return['available_markets'])
+                except json.JSONDecodeError:
+                    logger.warning(f"Failed to JSON decode available_markets string for track {data_to_return.get('track_id')} from SQLite: {data_to_return.get('available_markets')}")
+                    # Keep the original string if decoding fails, or handle as error
+            return data_to_return
+        else:
+            return None
     except SQLAlchemyError as e:
         logger.error("SQLAlchemyError in upsert_track.", exc_info=True, extra={"track_id": track_obj.track_id, "error": str(e)})
         raise DatabaseError(f"Failed to upsert track {track_obj.track_id}: {e}") from e

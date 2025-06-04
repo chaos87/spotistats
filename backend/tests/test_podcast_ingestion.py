@@ -7,16 +7,16 @@ from sqlalchemy import create_engine, text, JSON # Added JSON
 from sqlalchemy.orm import sessionmaker
 
 # Models and db functions
-from backend.src.models import Base, Artist, Album, Track, Listen, PodcastSeries, PodcastEpisode, RecentlyPlayedTracksRaw # Added RecentlyPlayedTracksRaw
-from backend.src.database import (
+from src.models import Base, Artist, Album, Track, Listen, PodcastSeries, PodcastEpisode, RecentlyPlayedTracksRaw # Added RecentlyPlayedTracksRaw
+from src.database import (
     get_max_played_at, upsert_artist, upsert_album, upsert_track,
     upsert_podcast_series, upsert_podcast_episode, insert_listen
 ) # Removed init_db as it's not used directly in tests after setup
 # Main processing function
-from backend.main import process_spotify_data # Removed get_spotify_credentials, SpotifyOAuthClient as they are mocked
+from main import process_spotify_data # Removed get_spotify_credentials, SpotifyOAuthClient as they are mocked
 
 # Normalizer
-from backend.src.normalizer import SpotifyItemNormalizer
+from src.normalizer import SpotifyItemNormalizer
 
 
 # Helper to create a timezone-aware datetime object
@@ -159,11 +159,11 @@ class TestPodcastIngestion(unittest.TestCase):
         self.session.rollback()
         self.session.close()
 
-    @patch('backend.main.get_spotify_credentials')
-    @patch('backend.main.SpotifyOAuthClient')
-    @patch('backend.main.get_recently_played_tracks')
+    @patch('main.get_spotify_credentials')
+    @patch('main.SpotifyOAuthClient')
+    @patch('main.get_recently_played_tracks')
     # Patch get_db_engine within main.py to return our in-memory SQLite engine
-    @patch('backend.main.get_db_engine')
+    @patch('main.get_db_engine')
     def test_ingestion_mixed_new_and_existing_items(
         self, mock_get_main_db_engine, mock_get_recently_played,
         mock_spotify_oauth_client, mock_get_creds
@@ -255,10 +255,10 @@ class TestPodcastIngestion(unittest.TestCase):
         self.assertEqual(self.session.query(PodcastEpisode).count(), 2)
 
 
-    @patch('backend.main.get_spotify_credentials')
-    @patch('backend.main.SpotifyOAuthClient')
-    @patch('backend.main.get_recently_played_tracks')
-    @patch('backend.main.get_db_engine')
+    @patch('main.get_spotify_credentials')
+    @patch('main.SpotifyOAuthClient')
+    @patch('main.get_recently_played_tracks')
+    @patch('main.get_db_engine')
     def test_ingestion_only_existing_items_returned(
         self, mock_get_main_db_engine, mock_get_recently_played,
         mock_spotify_oauth_client, mock_get_creds

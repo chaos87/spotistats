@@ -4,8 +4,14 @@ FROM python:3.10-slim-buster
 # Set the working directory in the container
 WORKDIR /app
 
+# Set PYTHONPATH
+ENV PYTHONPATH="/app"
+
 # Install poetry
 RUN pip install poetry
+
+# Configure poetry to not create virtualenvs, install into system python
+RUN poetry config virtualenvs.create false
 
 # Copy the dependency files
 COPY pyproject.toml poetry.lock* /app/

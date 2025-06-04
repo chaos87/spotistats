@@ -1,7 +1,7 @@
 import datetime
 import logging # Added
 from typing import Tuple, Dict, Any, Optional
-from backend.src.models import Artist, Album, Track, Listen, PodcastSeries, PodcastEpisode # Assuming models.py is in backend.src
+from .models import Artist, Album, Track, Listen, PodcastSeries, PodcastEpisode # Assuming models.py is in backend.src
 
 logger = logging.getLogger(__name__) # Added
 
