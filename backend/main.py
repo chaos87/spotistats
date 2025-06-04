@@ -1,19 +1,19 @@
 # At the top of main.py
-from .src.logging_config import setup_logging
+from backend.src.logging_config import setup_logging
 setup_logging() # Call this early
 
 import logging # Keep this for using logging.getLogger() later
 import os
 import datetime
 from sqlalchemy.orm import Session
-from .src.database import (
+from backend.src.database import (
     get_db_engine, init_db, get_session, get_max_played_at,
     upsert_artist, upsert_album, upsert_track, insert_listen,
     upsert_podcast_series, upsert_podcast_episode
 )
-from .src.models import Artist, Album, Track, Listen, PodcastSeries, PodcastEpisode
-from .src.normalizer import SpotifyItemNormalizer
-from .src.exceptions import DatabaseError, ConfigurationError, SpotifyAuthError, SpotifyAPIError # Updated import
+from backend.src.models import Artist, Album, Track, Listen, PodcastSeries, PodcastEpisode
+from backend.src.normalizer import SpotifyItemNormalizer
+from backend.src.exceptions import DatabaseError, ConfigurationError, SpotifyAuthError, SpotifyAPIError # Updated import
 # For this subtask, we'll use the placeholder functions in main.py for Spotify operations,
 # so ConfigurationError for Spotify credentials won't be hit from config.py yet.
 from backend.src.config import get_spotify_credentials
