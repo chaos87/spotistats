@@ -28,14 +28,14 @@ CUBEJS_WEB_SOCKETS=true # Enables WebSocket transport for real-time features
 
 ```env
 CUBEJS_DB_TYPE=postgres
-PG_HOST=ep-dark-river-a5bc54h5-pooler.us-east-2.aws.neon.tech
+PG_HOST=YOUR_NEON_HOST_HERE
 PG_PORT=5432
-PG_USER=neondb_owner
-PG_PASSWORD=npg_NLA2Ja0qTKxt # Replace with your actual password if different
-PG_DATABASE=neondb
+PG_USER=YOUR_NEON_USER
+PG_PASSWORD=YOUR_NEON_PASSWORD
+PG_DATABASE=YOUR_NEON_DATABASE
 PG_SSL=true
 
-CUBEJS_API_SECRET=your-api-secret-here # CHANGE THIS!
+CUBEJS_API_SECRET=YOUR_CUBEJS_API_SECRET # CHANGE THIS!
 CUBEJS_DEV_MODE=true
 CUBEJS_WEB_SOCKETS=true
 ```
