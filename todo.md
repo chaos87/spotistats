@@ -174,14 +174,14 @@ This checklist is based on the project specification, broken down into iterative
 
 ### Module 3.1: Cube.js Project Setup & DB Connection
 
--   [ ] **Initialize Cube.js Project**
-    -   [ ] Navigate to `cubejs/`.
-    -   [ ] Run Cube.js CLI command to initialize a new project (PostgreSQL).
-    -   [ ] Create `cubejs/README.md` with local dev server instructions.
--   [ ] **Configure DB Connection**
-    -   [ ] Update `cubejs/.env` with placeholder DB credentials (`PG_HOST`, `PG_USER`, etc.) (add to root `.gitignore`).
-    -   [ ] Ensure `cubejs/schema/index.js` or `example.js` references the correct DB configuration.
-    -   [ ] Verify local Cube.js dev server starts and connects to DB.
+-   [x] **Initialize Cube.js Project**
+    -   [x] Navigate to `cubejs/`.
+    -   [x] Run Cube.js CLI command to initialize a new project (PostgreSQL).
+    -   [x] Create `cubejs/README.md` with local dev server instructions.
+-   [x] **Configure DB Connection**
+    -   [x] Update `cubejs/.env` with placeholder DB credentials (`PG_HOST`, `PG_USER`, etc.) (add to root `.gitignore`).
+    -   [x] Ensure `cubejs/schema/index.js` or `example.js` references the correct DB configuration.
+    -   [x] Verify local Cube.js dev server starts and connects to DB.
 
 ### Module 3.2: Core Data Modeling
 
