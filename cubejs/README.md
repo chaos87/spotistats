@@ -24,22 +24,6 @@ CUBEJS_DEV_MODE=true # Enables development mode, providing more detailed error m
 CUBEJS_WEB_SOCKETS=true # Enables WebSocket transport for real-time features
 ```
 
-**Example for NeonDB (as configured in this project):**
-
-```env
-CUBEJS_DB_TYPE=postgres
-PG_HOST=YOUR_NEON_HOST_HERE
-PG_PORT=5432
-PG_USER=YOUR_NEON_USER
-PG_PASSWORD=YOUR_NEON_PASSWORD
-PG_DATABASE=YOUR_NEON_DATABASE
-PG_SSL=true
-
-CUBEJS_API_SECRET=YOUR_CUBEJS_API_SECRET # CHANGE THIS!
-CUBEJS_DEV_MODE=true
-CUBEJS_WEB_SOCKETS=true
-```
-
 ### 2. Install Dependencies
 
 Navigate to the `cubejs` directory and install the project dependencies. If you are using npm:
