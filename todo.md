@@ -155,20 +155,20 @@ This checklist is based on the project specification, broken down into iterative
 
 ### Module 2.6: Deployment & Scheduling
 
--   [ ] **Dockerize Python Ingestion Application (`backend/Dockerfile`)**
-    -   [ ] Create `backend/Dockerfile` optimized for Cloud Run.
-    -   [ ] Create `backend/README.md` with local build/run instructions.
--   [ ] **Deploy to Google Cloud Run (Manual)**
-    -   [ ] Create GCP project and enable necessary APIs.
-    -   [ ] Build and push Docker image to Google Artifact Registry.
-    -   [ ] Deploy Cloud Run service, setting all required environment variables (`SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET`, `SPOTIFY_REFRESH_TOKEN`, `DATABASE_URL`).
-    -   [ ] Allow unauthenticated invocations (for Cloud Scheduler simplicity).
-    -   [ ] Manually invoke the Cloud Run service to verify initial data ingestion.
--   [ ] **Set up Cloud Scheduler for Hourly Execution**
-    -   [ ] Create a Cloud Scheduler job with `0 * * * *` frequency.
-    -   [ ] Set target to HTTP with the Cloud Run service URL.
-    -   [ ] Create a dedicated service account for Cloud Scheduler with `Cloud Run Invoker` role.
-    -   [ ] Test the Cloud Scheduler job manually.
+-   [x] **Dockerize Python Ingestion Application (`backend/Dockerfile`)**
+    -   [x] Create `backend/Dockerfile` optimized for Cloud Run.
+    -   [x] Create `backend/README.md` with local build/run instructions.
+-   [x] **Deploy to Google Cloud Run (Manual)**
+    -   [x] Create GCP project and enable necessary APIs.
+    -   [x] Build and push Docker image to Google Artifact Registry.
+    -   [x] Deploy Cloud Run service, setting all required environment variables (`SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET`, `SPOTIFY_REFRESH_TOKEN`, `DATABASE_URL`).
+    -   [x] Allow unauthenticated invocations (for Cloud Scheduler simplicity).
+    -   [x] Manually invoke the Cloud Run service to verify initial data ingestion.
+-   [x] **Set up Cloud Scheduler for Hourly Execution**
+    -   [x] Create a Cloud Scheduler job with `0 * * * *` frequency.
+    -   [x] Set target to HTTP with the Cloud Run service URL.
+    -   [x] Create a dedicated service account for Cloud Scheduler with `Cloud Run Invoker` role.
+    -   [x] Test the Cloud Scheduler job manually.
 
 ## Phase 3: API Layer (Cube.js)
 
