@@ -6,27 +6,33 @@ cube(`Albums`, {
       sql: `album_id`,
       type: `string`,
       primaryKey: true,
-      shown: true
+      shown: true,
+      description: "The unique identifier for the album."
     },
     name: {
       sql: `name`,
-      type: `string`
+      type: `string`,
+      description: "The name of the album."
     },
     releaseDate: {
       sql: `release_date`,
-      type: `time`
+      type: `time`,
+      description: "The release date of the album."
     },
     albumType: {
       sql: `album_type`,
-      type: `string`
+      type: `string`,
+      description: "The type of the album (e.g., album, single)."
     },
     spotifyUrl: {
       sql: `spotify_url`,
-      type: `string`
+      type: `string`,
+      description: "The Spotify URL of the album."
     },
     imageUrl: {
       sql: `image_url`,
-      type: `string`
+      type: `string`,
+      description: "The URL of the album's cover art."
     }
   },
 
@@ -39,7 +45,8 @@ cube(`Albums`, {
 
   measures: {
     count: {
-      type: `count`
+      type: `count`,
+      description: "The total number of albums."
     }
   }
 });

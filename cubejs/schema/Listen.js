@@ -6,15 +6,18 @@ cube(`Listens`, {
       sql: `listen_id`,
       type: `number`,
       primaryKey: true,
-      shown: true
+      shown: true,
+      description: "The unique identifier for the listen event."
     },
     playedAt: {
       sql: `played_at`,
-      type: `time`
+      type: `time`,
+      description: "The timestamp when the listen event occurred."
     },
     itemType: {
       sql: `item_type`,
-      type: `string`
+      type: `string`,
+      description: "The type of item listened to (e.g., track, podcast episode)."
     }
   },
 
@@ -37,7 +40,8 @@ cube(`Listens`, {
 
   measures: {
     count: {
-      type: `count`
+      type: `count`,
+      description: "The total number of listen events."
     },
     totalDurationSeconds: { // Renamed from totalDurationMs
       // This sums the duration in seconds from the Tracks table.
@@ -45,7 +49,8 @@ cube(`Listens`, {
       sql: `${Tracks}.durationSeconds`, // References the updated dimension in Tracks
       type: `sum`,
       format: `decimal(2)`, // Format to two decimal places
-      title: `Total Listen Duration (s)`
+      title: `Total Listen Duration (s)`,
+      description: "The total duration of all listen events in seconds."
     }
   },
 
