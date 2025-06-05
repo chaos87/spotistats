@@ -39,12 +39,13 @@ cube(`Listens`, {
     count: {
       type: `count`
     },
-    totalDurationMs: { // Renamed to avoid conflict if we sum durations directly from other cubes
-      // This initial version sums duration_ms from the Tracks table.
+    totalDurationSeconds: { // Renamed from totalDurationMs
+      // This sums the duration in seconds from the Tracks table.
       // It will be updated in Module 3.3 to handle podcasts.
-      sql: `${Tracks}.duration_ms`,
+      sql: `${Tracks}.durationSeconds`, // References the updated dimension in Tracks
       type: `sum`,
-      title: `Total Listen Duration (ms)`
+      format: `decimal(2)`, // Format to two decimal places
+      title: `Total Listen Duration (s)`
     }
   },
 

@@ -12,8 +12,8 @@ cube(`Tracks`, {
       sql: `name`,
       type: `string`
     },
-    durationMs: {
-      sql: `duration_ms`,
+    durationSeconds: { // Renamed from durationMs
+      sql: `duration_ms / 1000.0`, // Convert to seconds
       type: `number`
     },
     explicit: {
@@ -53,9 +53,10 @@ cube(`Tracks`, {
     count: {
       type: `count`
     },
-    totalDuration: {
-      sql: `duration_ms`,
-      type: `sum`
+    totalDurationSeconds: { // Renamed from totalDuration
+      sql: `duration_ms / 1000.0`, // Use the original ms value for sum then implicitly it's in seconds
+      type: `sum`,
+      format: `decimal(2)` // Format to two decimal places
     }
   }
 });
