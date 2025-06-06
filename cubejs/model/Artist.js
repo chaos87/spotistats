@@ -25,9 +25,9 @@ cube(`Artists`, {
       description: "The URL of the artist's image."
     },
     genres: {
-      sql: `genres`,
-      type: `string`, // Cube.js will handle array type appropriately
-      description: "The genres associated with the artist."
+      sql: `unnest(genres)`,
+      type: `string`,
+      description: "The genres associated with the artist, unnested."
     }
   },
 
