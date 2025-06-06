@@ -51,6 +51,24 @@ cube(`Listens`, {
       format: `decimal(2)`, // Format to two decimal places
       title: `Total Listen Duration (s)`,
       description: "The total duration of all listen events in seconds."
+    },
+    total_duration_past_12_months: {
+      type: `sum`,
+      sql: `CASE WHEN ${CUBE}.item_type = 'track' THEN ${Tracks}.duration_ms ELSE 0 END`,
+      filters: [
+        { sql: `${CUBE}.played_at >= now() - interval '12 month'` }
+      ],
+      title: "Total Listen Duration (Past 12 Months, ms)",
+      description: "The total duration of listen events in milliseconds over the past 12 months."
+    },
+    total_duration_prior_12_months: {
+      type: `sum`,
+      sql: `CASE WHEN ${CUBE}.item_type = 'track' THEN ${Tracks}.duration_ms ELSE 0 END`,
+      filters: [
+        { sql: `${CUBE}.played_at >= now() - interval '24 month' AND ${CUBE}.played_at < now() - interval '12 month'` }
+      ],
+      title: "Total Listen Duration (Prior 12 Months, ms)",
+      description: "The total duration of listen events in milliseconds from 13 to 24 months ago."
     }
   },
 

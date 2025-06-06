@@ -20,4 +20,5 @@ module.exports = {
   // CUBEJS_DB_TYPE, CUBEJS_API_SECRET, CUBEJS_DEV_MODE, CUBEJS_WEB_SOCKETS
   // are typically picked up from environment variables automatically
   // and do not need to be explicitly set here if already in .env
+  schemaPath: 'model'
 };
