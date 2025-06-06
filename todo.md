@@ -185,24 +185,24 @@ This checklist is based on the project specification, broken down into iterative
 
 ### Module 3.2: Core Data Modeling
 
--   [ ] **Model `Artist` Cube (`cubejs/schema/Artist.js`)**
-    -   [ ] Define `sql_table` and `dimensions`.
-    -   [ ] Map `artist_id`, `name`, `spotify_url`, `image_url`.
--   [ ] **Model `Album` Cube (`cubejs/schema/Album.js`)**
-    -   [ ] Define `sql_table`, `dimensions`.
-    -   [ ] Map `album_id`, `name`, `release_date`, `album_type`, `spotify_url`, `image_url`.
-    -   [ ] Define `joins` to `Artist` cube.
--   [ ] **Model `Track` Cube (`cubejs/schema/Track.js`)**
-    -   [ ] Define `sql_table`, `dimensions`.
-    -   [ ] Map `track_id`, `name`, `duration_ms`, `explicit`, `popularity`, `preview_url`, `spotify_url`, `available_markets`, `last_played_at`.
-    -   [ ] Define `joins` to `Album` cube.
--   [ ] **Model `Listen` Cube (`cubejs/schema/Listen.js`)**
-    -   [ ] Define `sql_table`.
-    -   [ ] Define `measures.count`.
-    -   [ ] Define `measures.total_duration` (initial version, summing `tracks.duration_ms`).
-    -   [ ] Define `timeDimension` for `played_at`.
-    -   [ ] Define `joins` to `Track`, `Album`, `Artist` cubes.
--   [ ] **Verify Core Models in Cube.js Playground.**
+-   [x] **Model `Artist` Cube (`cubejs/schema/Artist.js`)**
+    -   [x] Define `sql_table` and `dimensions`.
+    -   [x] Map `artist_id`, `name`, `spotify_url`, `image_url`.
+-   [x] **Model `Album` Cube (`cubejs/schema/Album.js`)**
+    -   [x] Define `sql_table`, `dimensions`.
+    -   [x] Map `album_id`, `name`, `release_date`, `album_type`, `spotify_url`, `image_url`.
+    -   [x] Define `joins` to `Artist` cube.
+-   [x] **Model `Track` Cube (`cubejs/schema/Track.js`)**
+    -   [x] Define `sql_table`, `dimensions`.
+    -   [x] Map `track_id`, `name`, `duration_ms`, `explicit`, `popularity`, `preview_url`, `spotify_url`, `available_markets`, `last_played_at`.
+    -   [x] Define `joins` to `Album` cube.
+-   [x] **Model `Listen` Cube (`cubejs/schema/Listen.js`)**
+    -   [x] Define `sql_table`.
+    -   [x] Define `measures.count`.
+    -   [x] Define `measures.total_duration` (initial version, summing `tracks.duration_ms`).
+    -   [x] Define `timeDimension` for `played_at`.
+    -   [x] Define `joins` to `Track`, `Album`, `Artist` cubes.
+-   [x] **Verify Core Models in Cube.js Playground.**
 
 ### Module 3.3: Podcast & Advanced Relationship Modeling
 
