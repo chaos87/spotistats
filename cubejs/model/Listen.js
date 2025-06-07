@@ -48,7 +48,7 @@ cube(`Listens`, {
       // It will be updated in Module 3.3 to handle podcasts.
       sql: `${Tracks}.durationSeconds`, // References the updated dimension in Tracks
       type: `sum`,
-      format: `decimal(2)`, // Format to two decimal places
+      format: `number`, // Format to two decimal places
       title: `Total Listen Duration (s)`,
       description: "The total duration of all listen events in seconds."
     },

@@ -66,7 +66,7 @@ cube(`Tracks`, {
     totalDurationSeconds: { // Renamed from totalDuration
       sql: `duration_ms / 1000.0`, // Use the original ms value for sum then implicitly it's in seconds
       type: `sum`,
-      format: `decimal(2)`, // Format to two decimal places
+      format: `number`, // Format to two decimal places
       description: "The total duration of all tracks in seconds."
     }
   }
