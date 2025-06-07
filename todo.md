@@ -217,12 +217,12 @@ This checklist is based on the project specification, broken down into iterative
 
 ### Module 3.4: Feature-Specific Data Modeling
 
--   [ ] **Model `artists.genres` for Taste Evolution (`cubejs/schema/Artist.js`)**
-    -   [ ] Modify `Artist.js` to define a dimension for `genres` using `sql` property with `unnest()`.
--   [ ] **Define "You Used to Love This" Measures (`cubejs/schema/Listen.js`)**
-    -   [ ] Add `measures.total_duration_past_12_months` to `Listen.js` (filtered by time).
-    -   [ ] Add `measures.total_duration_prior_12_months` to `Listen.js` (filtered by time).
--   [ ] **Verify new genre and "You Used to Love This" measures in Cube.js Playground.**
+-   [x] **Model `artists.genres` for Taste Evolution (`cubejs/schema/Artist.js`)**
+    -   [x] Modify `Artist.js` to define a dimension for `genres` using `sql` property with `unnest()`.
+-   [x] **Define "You Used to Love This" Measures (`cubejs/schema/Listen.js`)**
+    -   [x] Add `measures.total_duration_past_12_months` to `Listen.js` (filtered by time).
+    -   [x] Add `measures.total_duration_prior_12_months` to `Listen.js` (filtered by time).
+-   [x] **Verify new genre and "You Used to Love This" measures in Cube.js Playground.**
 
 ### Module 3.5: Cube.js Deployment
 
