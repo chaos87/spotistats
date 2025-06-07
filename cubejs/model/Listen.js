@@ -46,7 +46,7 @@ cube(`Listens`, {
     totalDurationSeconds: { // Renamed from totalDurationMs
       // This sums the duration in seconds from the Tracks table.
       // It will be updated in Module 3.3 to handle podcasts.
-      sql: `${Tracks}.durationSeconds`, // References the updated dimension in Tracks
+      sql: `duration_ms / 1000.0`, // References the updated dimension in Tracks
       type: `sum`,
       format: `number`, // Format to two decimal places
       title: `Total Listen Duration (s)`,
@@ -54,7 +54,7 @@ cube(`Listens`, {
     },
     total_duration_past_12_months: {
       type: `sum`,
-      sql: `CASE WHEN ${CUBE}.item_type = 'track' THEN ${Tracks}.duration_ms ELSE 0 END`,
+      sql: `CASE WHEN ${CUBE}.item_type = 'track' THEN duration_ms ELSE 0 END`,
       filters: [
         { sql: `${CUBE}.played_at >= now() - interval '12 month'` }
       ],
@@ -63,7 +63,7 @@ cube(`Listens`, {
     },
     total_duration_prior_12_months: {
       type: `sum`,
-      sql: `CASE WHEN ${CUBE}.item_type = 'track' THEN ${Tracks}.duration_ms ELSE 0 END`,
+      sql: `CASE WHEN ${CUBE}.item_type = 'track' THEN duration_ms ELSE 0 END`,
       filters: [
         { sql: `${CUBE}.played_at >= now() - interval '24 month' AND ${CUBE}.played_at < now() - interval '12 month'` }
       ],
