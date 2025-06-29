@@ -1,5 +1,5 @@
 # Use an appropriate Node.js base image
-FROM node:18-slim
+FROM node:20-slim
 
 # Set the working directory
 WORKDIR /usr/src/app
@@ -7,8 +7,7 @@ WORKDIR /usr/src/app
 # Copy package.json and install dependencies
 # We assume npm is used. If a package-lock.json was available, it should be copied too.
 COPY package.json ./
-# Install all dependencies, including devDependencies, as Cube.js server might need them.
-RUN npm install
+RUN npm cache clean --force && npm install
 
 # Copy the Cube.js project files
 # Copy model directory, cube.js, and any other necessary configuration files.
@@ -22,4 +21,4 @@ EXPOSE 4000
 
 # Define the command to start the Cube.js server
 # This is based on the "dev" script in package.json
-CMD [ "npx", "cubejs-server" ]
+CMD [ "npm", "start" ]
