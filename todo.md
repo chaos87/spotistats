@@ -226,35 +226,35 @@ This checklist is based on the project specification, broken down into iterative
 
 ### Module 3.5: Cube.js Deployment
 
--   [ ] **Dockerize Cube.js Application (`cubejs/Dockerfile`)**
-    -   [ ] Create `cubejs/Dockerfile`.
-    -   [ ] Optimize for production.
--   [ ] **Deploy Cube.js to Google Cloud Run (Instructions)**
-    -   [ ] Build and push Docker image to Google Artifact Registry.
-    -   [ ] Deploy Cloud Run service, setting all required environment variables for DB connection.
-    -   [ ] Set service to allow unauthenticated invocations.
-    -   [ ] Record the Cube.js API endpoint URL.
+-   [x] **Dockerize Cube.js Application (`cubejs/Dockerfile`)**
+    -   [x] Create `cubejs/Dockerfile`.
+    -   [x] Optimize for production.
+-   [x] **Deploy Cube.js to Google Cloud Run (Instructions)**
+    -   [x] Build and push Docker image to Google Artifact Registry.
+    -   [x] Deploy Cloud Run service, setting all required environment variables for DB connection.
+    -   [x] Set service to allow unauthenticated invocations.
+    -   [x] Record the Cube.js API endpoint URL.
 
 ## Phase 4: Frontend Dashboard (React)
 
 ### Module 4.1: React Project Setup & Basic Structure
 
--   [ ] **Initialize React Project (Vite)**
-    -   [ ] Navigate to `frontend/`.
-    -   [ ] Run Vite command to initialize React project.
--   [ ] **Install & Configure UI/Charting Libraries**
-    -   [ ] Install `antd`, `chart.js`, `react-chartjs-2`.
-    -   [ ] Configure Ant Design `ConfigProvider` in `frontend/src/main.jsx`.
--   [ ] **Setup Cube.js Client**
-    -   [ ] Install `@cubejs-client/core`, `@cubejs-client/react`.
-    -   [ ] Create `frontend/src/cubejs-client.js` with `CubejsApi` instance pointing to `VITE_CUBEJS_API_URL` (from `.env.local`).
--   [ ] **Basic App Structure (`frontend/src/App.js`)**
-    -   [ ] Create `App.js` with Ant Design `Layout`, `Header`, `Content`.
-    -   [ ] Add basic text to verify rendering.
--   [ ] **Configure `.gitignore`**
-    -   [ ] Update `frontend/.gitignore` for `node_modules` and `dist`.
-    -   [ ] Create `frontend/.env.local` for `VITE_CUBEJS_API_URL` (add to root `.gitignore`).
--   [ ] **Verify Local React Development Server.**
+-   [x] **Initialize React Project (Vite)**
+    -   [x] Navigate to `frontend/`.
+    -   [x] Run Vite command to initialize React project.
+-   [x] **Install & Configure UI/Charting Libraries**
+    -   [x] Install `antd`, `chart.js`, `react-chartjs-2`.
+    -   [x] Configure Ant Design `ConfigProvider` in `frontend/src/main.jsx`.
+-   [x] **Setup Cube.js Client**
+    -   [x] Install `@cubejs-client/core`, `@cubejs-client/react`.
+    -   [x] Create `frontend/src/cubejs-client.js` with `CubejsApi` instance pointing to `VITE_CUBEJS_API_URL` (from `.env.local`).
+-   [x] **Basic App Structure (`frontend/src/App.js`)**
+    -   [x] Create `App.js` with Ant Design `Layout`, `Header`, `Content`.
+    -   [x] Add basic text to verify rendering.
+-   [x] **Configure `.gitignore`**
+    -   [x] Update `frontend/.gitignore` for `node_modules` and `dist`.
+    -   [x] Create `frontend/.env.local` for `VITE_CUBEJS_API_URL` (add to root `.gitignore`).
+-   [x] **Verify Local React Development Server.**
 
 ### Module 4.2: Feature Implementation: Taste Evolution
 
